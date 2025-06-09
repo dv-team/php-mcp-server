@@ -1,0 +1,11 @@
+/*
+!/.codex
+!/examples
+!/src
+!/tests
+!/.gitignore
+!/cli.php
+!/composer.json
+!/phpstan.neon
+!/phpunit.xml
+!/README.md

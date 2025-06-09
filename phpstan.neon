@@ -1,0 +1,7 @@
+parameters:
+    level: max
+
+    paths:
+        - public/
+        - src/
+        - tests/
