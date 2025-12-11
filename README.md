@@ -87,37 +87,43 @@ foreach($files as $file) {
 
 ## Example: Registering Tools
 
-Here are examples of tools registered in `examples/src/prompts-and-tools-http.php` (the CLI sample mirrors the same behavior):
+Here are three simple tools you might register:
 
 ```php
 $server->registerTool(
-	name: 'list_files',
-	description: 'Lists Items in the file system.',
+	name: 'echo_text',
+	description: 'Echoes back the provided text.',
 	inputSchema: new MCPToolInputSchema(
 		properties: new MCPToolProperties(
-			new MCPToolString(name: 'directory', description: 'The directory to look into. Leave this empty to look in the root directory.', required: false),
+			new MCPToolString(name: 'text', description: 'Text to echo', required: true),
 		)
 	),
 	isDangerous: false,
-	handler: function (object $input): MCPToolResult {
-		$directory = trim((string) ($input->directory ?? ''), '/\\');
-		$directory = strtr($directory, ['.' => '']);
-		$baseDirectory = sprintf('%s/../file-structure', __DIR__);
-		$files = scandir("$baseDirectory/$directory");
+	handler: static function (object $input): MCPToolResult {
+		return new MCPToolResult(
+			content: (object) ['echo' => (string) ($input->text ?? '')],
+			isError: false
+		);
+	}
+);
 
-		$items = [];
-		foreach($files as $file) {
-			if(str_starts_with($file, '.')) {
-				continue;
-			}
-			if(is_dir("$baseDirectory/$directory/$file")) {
-				$items[] = (object) ['type' => 'directory', 'name' => "$directory/$file"];
-			} elseif(is_file("$baseDirectory/$directory/$file")) {
-				$items[] = (object) ['type' => 'file', 'name' => "$directory/$file"];
-			}
-		}
+$server->registerTool(
+	name: 'sum_numbers',
+	description: 'Adds two integers together.',
+	inputSchema: new MCPToolInputSchema(
+		properties: new MCPToolProperties(
+			new MCPToolInteger(name: 'a', description: 'First addend', required: true),
+			new MCPToolInteger(name: 'b', description: 'Second addend', required: true),
+		)
+	),
+	isDangerous: false,
+	handler: static function (object $input): MCPToolResult {
+		$sum = (int) ($input->a ?? 0) + (int) ($input->b ?? 0);
 
-		return new MCPToolResult(data: (object) ['directory' => $directory, 'items' => $items]);
+		return new MCPToolResult(
+			content: ['sum' => $sum],
+			isError: false
+		);
 	}
 );
 
@@ -135,16 +141,61 @@ $server->registerTool(
 		required: []
 	),
 	isDangerous: true,
-	handler: function (object $input): MCPToolResult {
+	handler: static function (object $input): MCPToolResult {
 		$json = json_encode($input, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 		error_log($json);
 
 		return new MCPToolResult(
-			data: ['result' => 'Email sent successfully!']
+			content: ['result' => 'Email queued!'],
+			isError: false
 		);
 	}
 );
 ```
+
+## Example: Attribute-Based Tools
+
+You can mark methods with attributes and let the `AttributeToolRegistrar` build the MCP tool definitions for you:
+
+```php
+use McpSrv\Common\Attributes\MCPDescription;
+use McpSrv\Common\Attributes\MCPTool;
+use McpSrv\Common\Tools\AttributeToolRegistrar;
+use McpSrv\MCPServer;
+
+class MathTools {
+	#[MCPTool(
+		name: 'add_numbers',
+		description: 'Adds two integers together.',
+		parametersSchema: [
+			'type' => 'object',
+			'properties' => [], // left empty; types/required flags are inferred from parameter signatures
+		],
+		returnSchema: [
+			'type' => 'object',
+			'properties' => [
+				'sum' => ['type' => 'integer', 'description' => 'Result of the addition', 'required' => true],
+			],
+			'required' => ['sum'],
+		],
+	)]
+	public function add(
+		#[MCPDescription('First addend')]
+		int $a,
+		#[MCPDescription('Second addend')]
+		int $b
+	): array {
+		return ['sum' => $a + $b];
+	}
+}
+
+$server = new MCPServer('attribute-sample', $responseHandler);
+
+$registrar = new AttributeToolRegistrar();
+$registrar->register(new MathTools(), $server);
+```
+
+Descriptions on parameters are copied into the generated schema; when a property is not supplied in `parametersSchema`, the registrar infers the JSON Schema `type` and required flag from the method signature.
 
 ## Notes
 

@@ -53,36 +53,4 @@ class MCPResourceTest extends TestCase {
 		$this->assertSame(['path'], $required);
 		$this->assertArrayHasKey('path', $inputSchema['properties']);
 	}
-
-	public function testReadResourceNormalizesContent(): void {
-		$handler = new CapturingResponseHandler();
-		$server = new MCPServer('test', $handler);
-
-		$server->registerResource(
-			uri: 'example://resource',
-			name: 'Example',
-			description: null,
-			handler: static fn (object $args): string => 'hello world',
-			properties: [],
-			required: []
-		);
-
-		$request = json_encode([
-			'method' => 'resources/read',
-			'id' => 5,
-			'params' => (object) ['uri' => 'example://resource'],
-		], JSON_THROW_ON_ERROR);
-
-		$server->run($request);
-
-		$this->assertNotNull($handler->reply);
-		$this->assertSame(5, $handler->reply['id']);
-		$this->assertIsArray($handler->reply['result']);
-		/** @var array{contents: list<array<string, mixed>>} $result */
-		$result = $handler->reply['result'];
-		$this->assertCount(1, $result['contents']);
-		$content = $result['contents'][0];
-		$this->assertSame('example://resource', $content['uri']);
-		$this->assertSame('hello world', $content['text']);
-	}
 }

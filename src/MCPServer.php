@@ -9,6 +9,7 @@ use McpSrv\Common\Response\ResponseHandlerInterface;
 use McpSrv\Types\MCPPrompt;
 use McpSrv\Types\Prompts\MCPPromptArguments;
 use McpSrv\Types\Prompts\MCPPromptResult;
+use McpSrv\Types\Prompts\PromptResult\PromptResultMessage;
 use McpSrv\Types\Tools\MCPTool;
 use McpSrv\Types\Tools\MCPToolInputSchema;
 use McpSrv\Types\Tools\MCPToolResult;
@@ -34,13 +35,15 @@ use Throwable;
  *     required?: string[]
  * }
  *
+ * @phpstan-type TResourceResult array{uri: string, mimeType?: string, text: string}
+ *
  * @phpstan-type TResource array{
  *     uri: string,
  *     name: string,
  *     description: null|string,
  *     mimeType: null|string,
  *     inputSchema: TResourceInputSchema,
- *     handler: callable(object): (array<string, mixed>|array<int, array<string, mixed>|object|string>|object|string)
+ *     handler: callable(object): TResourceResult[]
  * }
  *
  * @phpstan-type TResourceTemplateProperty array{type: string, name: string, description?: string, required?: bool}
@@ -48,11 +51,12 @@ use Throwable;
  * @phpstan-type TResourceTemplate array{
  *     uriTemplate: string,
  *     description?: string,
- *     properties: TResourceTemplateProperty[]
+ *     properties: TResourceTemplateProperty[],
+ *     handler: callable(object): TResourceResult[]
  * }
  */
 class MCPServer {
-	/** @var array<string, MCPPrompt> */
+	/** @var array<string, PromptResultMessage[]> */
 	private array $prompts = [];
 	
 	/** @var array<string, MCPTool> */
@@ -75,7 +79,7 @@ class MCPServer {
 	 * @param string $name
 	 * @param string $description
 	 * @param MCPPromptArguments $arguments
-	 * @param callable(object): string $handler
+	 * @param callable(object): TResourceResult[] $handler
 	 */
 	public function registerPrompt(
 		string $name,
@@ -94,7 +98,7 @@ class MCPServer {
 	 * @param string $uri
 	 * @param string $name
 	 * @param null|string $description
-	 * @param callable(object): (array<string, mixed>|array<int, array<string, mixed>|object|string>|object|string) $handler
+	 * @param callable(object): TResourceResult[] $handler
 	 * @param null|string $mimeType
 	 * @param array<string, mixed> $properties
 	 * @param string[] $required
@@ -149,6 +153,7 @@ class MCPServer {
 	 * @param MCPToolInputSchema $inputSchema
 	 * @param bool $isDangerous
 	 * @param callable(object): MCPToolResult $handler
+	 * @param null|array<string, mixed> $returnSchema
 	 * @return void
 	 */
 	public function registerTool(
@@ -156,14 +161,16 @@ class MCPServer {
 		string $description,
 		MCPToolInputSchema $inputSchema,
 		bool $isDangerous,
-		$handler
+		$handler,
+		?array $returnSchema = null
 	) {
 		$this->tools[$name] = new MCPTool(
 			name: $name,
 			description: $description,
 			arguments: $inputSchema,
 			isDangerous: $isDangerous,
-			handler: $handler
+			handler: $handler,
+			returnSchema: $returnSchema
 		);
 	}
 
@@ -337,7 +344,7 @@ class MCPServer {
 
 	/**
 	 * @param object $params
-	 * @return array{contents: list<non-empty-array<int|string, mixed>>}
+	 * @return array{contents: list<array{uri: string, mimeType?: string, text: string}>}
 	 * @throws MCPInvalidArgumentException
 	 */
 	private function readResource(object $params): array {
@@ -345,18 +352,34 @@ class MCPServer {
 			throw new MCPInvalidArgumentException('Missing or invalid resource uri', 100);
 		}
 
-		if(!array_key_exists($params->uri, $this->resources)) {
-			throw new MCPInvalidArgumentException("Unknown resource: {$params->uri}", 100);
+		$arguments = property_exists($params, 'arguments') && is_object($params->arguments) ? $params->arguments : new \stdClass();
+
+		if(array_key_exists($params->uri, $this->resources)) {
+			$resource = $this->resources[$params->uri];
+
+			$handler = $resource['handler'];
+			$result = $handler($arguments);
+
+			return ['contents' => $result];
 		}
 
-		$arguments = property_exists($params, 'arguments') && is_object($params->arguments) ? $params->arguments : new \stdClass();
-		$resource = $this->resources[$params->uri];
+		foreach($this->resourceTemplates as $template) {
+			$regex = sprintf('{%s}', preg_replace('{\{([a-zA-Z_][a-zA-Z0-9_]*)\}}', '(?<$1>[^/]+)', $template['uriTemplate']));
 
-		$handler = $resource['handler'];
-		/** @var array<string, mixed>|array<int, array<string, mixed>|object|string>|object|string $result */
-		$result = $handler($arguments);
+			if(preg_match($regex, $params->uri, $matches)) {
+				$arguments = [];
+				foreach($template['properties'] as $property) {
+					$arguments[$property['name']] = $matches[$property['name']] ?? null;
+				}
 
-		return ['contents' => $this->normalizeResourceContents($resource['uri'], $result)];
+				$handler = $template['handler'];
+				$result = $handler((object) $arguments);
+
+				return ['contents' => $result];
+			}
+		}
+
+		throw new MCPInvalidArgumentException("Unknown resource: {$params->uri}", 100);
 	}
 
 	/**
@@ -419,44 +442,5 @@ class MCPServer {
 		$tool = $this->tools[$params->name];
 		$handler = $tool->handler;
 		return $handler($params->arguments);
-	}
-
-	/**
-	 * @param string $uri
-	 * @param array<string, mixed>|array<int, array<string, mixed>|object|string>|object|string $rawContents
-	 * @return list<non-empty-array<int|string, mixed>>
-	 * @throws MCPInvalidArgumentException
-	 */
-	private function normalizeResourceContents(string $uri, array|object|string $rawContents): array {
-		$items = [];
-
-		if(is_array($rawContents) && array_is_list($rawContents)) {
-			$items = $rawContents;
-		} else {
-			$items[] = $rawContents;
-		}
-
-		$contents = [];
-
-		foreach($items as $item) {
-			if(is_string($item)) {
-				$content = ['uri' => $uri, 'text' => $item];
-			} elseif(is_array($item)) {
-				$content = $item;
-			} elseif(is_object($item)) {
-				/** @var array<string, mixed> $content */
-				$content = (array) $item;
-			} else {
-				throw new MCPInvalidArgumentException('Resource handler must return strings, arrays or objects', 100);
-			}
-
-			if(!array_key_exists('uri', $content)) {
-				$content['uri'] = $uri;
-			}
-
-			$contents[] = $content;
-		}
-
-		return $contents;
 	}
 }
