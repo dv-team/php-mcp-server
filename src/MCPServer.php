@@ -13,6 +13,7 @@ use McpSrv\Types\Tools\MCPTool;
 use McpSrv\Types\Tools\MCPToolInputSchema;
 use McpSrv\Types\Tools\MCPToolResult;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -171,6 +172,29 @@ class MCPServer {
 			handler: $handler,
 			returnSchema: $returnSchema
 		);
+	}
+
+	/**
+	 * @param resource $resource
+	 * @return void
+	 * @throws JsonException
+	 */
+	public function runCli($resource = STDIN): void {
+		if(!is_resource($resource)) {
+			throw new RuntimeException('Failed to open stdin');
+		}
+		while(!feof($resource)) {
+			/** @var string|false $line */
+			$line = fgets($resource, null);
+			if($line === false) {
+				continue;
+			}
+
+			$this->logger?->debug("IN", (array) json_decode(json: $line, associative: false, flags: JSON_THROW_ON_ERROR));
+
+			$this->run($line);
+		}
+		$this->logger?->debug('SYSTEM: Server stopped');
 	}
 
 	public function run(string $input): void {
