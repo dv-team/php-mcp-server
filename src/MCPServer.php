@@ -10,7 +10,7 @@ use McpSrv\Types\MCPPrompt;
 use McpSrv\Types\Prompts\MCPPromptArguments;
 use McpSrv\Types\Prompts\MCPPromptResult;
 use McpSrv\Types\Tools\MCPTool;
-use McpSrv\Types\Tools\MCPToolInputSchema;
+use McpSrv\Types\Tools\MCPToolInputSchemaInterface;
 use McpSrv\Types\Tools\MCPToolResult;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
@@ -150,19 +150,19 @@ class MCPServer {
 	/**
 	 * @param string $name
 	 * @param string $description
-	 * @param MCPToolInputSchema $inputSchema
+	 * @param MCPToolInputSchemaInterface $inputSchema
 	 * @param bool $isDangerous
 	 * @param callable(object): MCPToolResult $handler
-	 * @param null|array<string, mixed> $returnSchema
+	 * @param null|object $returnSchema
 	 * @return void
 	 */
 	public function registerTool(
 		string $name,
 		string $description,
-		MCPToolInputSchema $inputSchema,
+		MCPToolInputSchemaInterface $inputSchema,
 		bool $isDangerous,
 		$handler,
-		?array $returnSchema = null
+		?object $returnSchema = null
 	) {
 		$this->tools[$name] = new MCPTool(
 			name: $name,
@@ -435,14 +435,14 @@ class MCPServer {
 
 	/**
 	 * @param object $params
-	 * @return array{tools: array<array{name: string, description: string, inputSchema: array<string, mixed>}>}
+	 * @return object{tools: array<object{name: string, description: string, inputSchema: object, returnSchema?: object}>}
 	 */
-	private function listTools(object $params): array {
+	private function listTools(object $params): object {
 		$tools = [];
 		foreach($this->tools as $tool) {
 			$tools[] = $tool->jsonSerialize();
 		}
-		return ['tools' => $tools];
+		return (object) ['tools' => $tools];
 	}
 
 	/**

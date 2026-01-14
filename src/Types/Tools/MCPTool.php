@@ -8,28 +8,28 @@ class MCPTool implements JsonSerializable {
 	/**
 	 * @param string $name
 	 * @param string $description
-	 * @param MCPToolInputSchema $arguments
+	 * @param MCPToolInputSchemaInterface $arguments
 	 * @param callable(object): MCPToolResult $handler
-	 * @param null|array<string, mixed> $returnSchema
+	 * @param null|object $returnSchema
 	 */
 	public function __construct(
 		public readonly string $name,
 		public readonly string $description,
-		public readonly MCPToolInputSchema $arguments,
+		public readonly MCPToolInputSchemaInterface $arguments,
 		public readonly bool $isDangerous,
 		public $handler,
-		public readonly ?array $returnSchema = null,
+		public readonly ?object $returnSchema = null,
 	) {}
 	
 	/**
-	 * @return array{
+	 * @return object{
 	 *     name: string,
 	 *     description: string,
-	 *     inputSchema: array<string, mixed>,
-	 *     returnSchema?: array<string, mixed>
+	 *     inputSchema: object,
+	 *     returnSchema?: object
 	 * }
 	 */
-	public function jsonSerialize(): array {
+	public function jsonSerialize(): object {
 		$result = [
 			'name' => $this->name,
 			'description' => $this->description,
@@ -40,6 +40,6 @@ class MCPTool implements JsonSerializable {
 			$result['returnSchema'] = $this->returnSchema;
 		}
 
-		return $result;
+		return (object) $result;
 	}
 }

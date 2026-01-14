@@ -2,9 +2,7 @@
 
 namespace McpSrv\Types\Tools;
 
-use JsonSerializable;
-
-class MCPToolInputSchema implements JsonSerializable {
+class MCPToolInputSchema implements MCPToolInputSchemaInterface {
 	/**
 	 * @param string[] $required
 	 * @param MCPToolProperties $properties
@@ -28,13 +26,13 @@ class MCPToolInputSchema implements JsonSerializable {
 	}
 	
 	/**
-	 * @return array{
+	 * @return object{
 	 *     type: 'object',
 	 *     properties: array<string, array<string, mixed>>|object,
 	 *     required?: string[]
 	 * }
 	 */
-	public function jsonSerialize(): array {
+	public function jsonSerialize(): object {
 		$required = array_values(array_unique(array_merge($this->required, $this->getRequired())));
 		
 		$result = [
@@ -46,6 +44,6 @@ class MCPToolInputSchema implements JsonSerializable {
 			$result['required'] = $required;
 		}
 		
-		return $result;
+		return (object) $result;
 	}
 }

@@ -19,7 +19,7 @@ class MCPToolSchemaTest extends TestCase {
 			required: []
 		);
 		
-		$serialized = $schema->jsonSerialize();
+		$serialized = (array) $schema->jsonSerialize();
 		
 		self::assertArrayHasKey('properties', $serialized);
 		self::assertIsObject($serialized['properties']);
@@ -35,7 +35,7 @@ class MCPToolSchemaTest extends TestCase {
 			required: ['b']
 		);
 		
-		$serialized = $schema->jsonSerialize();
+		$serialized = (array) $schema->jsonSerialize();
 		
 		if(!array_key_exists('required', $serialized)) {
 			self::fail('Required key missing from serialized schema');

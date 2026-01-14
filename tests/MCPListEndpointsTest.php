@@ -74,30 +74,26 @@ class MCPListEndpointsTest extends TestCase {
 			handler: static fn (object $input): MCPToolResult => new MCPToolResult(content: (object) ['echo' => $input->text ?? null], isError: false)
 		);
 
-		$request = json_encode([
-			'method' => 'tools/list',
-			'id' => 22,
-			'params' => (object) [],
-		], JSON_THROW_ON_ERROR);
+		$request = json_encode(['method' => 'tools/list', 'id' => 22, 'params' => (object) []], JSON_THROW_ON_ERROR);
 
 		$server->run($request);
 
 		$this->assertNotNull($handler->reply);
 		$this->assertSame(22, $handler->reply['id']);
-		$this->assertIsArray($handler->reply['result']);
-		/** @var array{tools: list<array{name: string, description: string, inputSchema: array{type: string, properties: array<string, mixed>|object, required?: list<string>}}>} $result */
+		$this->assertIsObject($handler->reply['result']);
+		/** @var object{tools: list<object{name: string, description: string, inputSchema: object{type: string, properties: array<string, mixed>|object, required?: list<string>}}>} $result */
 		$result = $handler->reply['result'];
-		$this->assertCount(1, $result['tools']);
-		$tool = $result['tools'][0];
-		$this->assertSame('echo_tool', $tool['name']);
-		$this->assertArrayHasKey('inputSchema', $tool);
-		$inputSchema = $tool['inputSchema'];
-		$this->assertSame('object', $inputSchema['type']);
-		$this->assertArrayHasKey('properties', $inputSchema);
-		$this->assertIsObject($inputSchema['properties']);
-		$properties = (array) $inputSchema['properties'];
-		$this->assertArrayHasKey('text', $properties);
-		$required = $inputSchema['required'] ?? [];
+		$this->assertCount(1, $result->tools);
+		$tool = $result->tools[0];
+		$this->assertSame('echo_tool', $tool->name);
+		$this->assertObjectHasProperty('inputSchema', $tool);
+		$inputSchema = $tool->inputSchema;
+		$this->assertSame('object', $inputSchema->type);
+		$this->assertObjectHasProperty('properties', $inputSchema);
+		$this->assertIsObject($inputSchema->properties);
+		$properties = $inputSchema->properties;
+		$this->assertObjectHasProperty('text', $properties);
+		$required = $inputSchema->required ?? [];
 		$this->assertContains('text', $required);
 	}
 }
