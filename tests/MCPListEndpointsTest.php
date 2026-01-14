@@ -27,7 +27,7 @@ class MCPListEndpointsTest extends TestCase {
 			arguments: new MCPPromptArguments(
 				new MCPPromptArgument('name', 'Person name', true)
 			),
-			handler: static fn (): MCPPromptResult => new MCPPromptResult(
+			handler: static fn (object $args): MCPPromptResult => new MCPPromptResult(
 				description: 'Greeting prompt',
 				messages: [new PromptResultStringMessage(RoleEnum::User, 'hi')]
 			)
@@ -71,7 +71,7 @@ class MCPListEndpointsTest extends TestCase {
 				)
 			),
 			isDangerous: false,
-			handler: static fn (object $input): MCPToolResult => new MCPToolResult((object) ['echo' => $input->text ?? null])
+			handler: static fn (object $input): MCPToolResult => new MCPToolResult(content: (object) ['echo' => $input->text ?? null], isError: false)
 		);
 
 		$request = json_encode([
@@ -85,7 +85,7 @@ class MCPListEndpointsTest extends TestCase {
 		$this->assertNotNull($handler->reply);
 		$this->assertSame(22, $handler->reply['id']);
 		$this->assertIsArray($handler->reply['result']);
-		/** @var array{tools: list<array{name: string, description: string, inputSchema: array{type: string, properties: array<string, mixed>, required?: array<int, string>}}>} $result */
+		/** @var array{tools: list<array{name: string, description: string, inputSchema: array{type: string, properties: array<string, mixed>|object, required?: list<string>}}>} $result */
 		$result = $handler->reply['result'];
 		$this->assertCount(1, $result['tools']);
 		$tool = $result['tools'][0];
@@ -94,7 +94,9 @@ class MCPListEndpointsTest extends TestCase {
 		$inputSchema = $tool['inputSchema'];
 		$this->assertSame('object', $inputSchema['type']);
 		$this->assertArrayHasKey('properties', $inputSchema);
-		$this->assertArrayHasKey('text', $inputSchema['properties']);
+		$this->assertIsObject($inputSchema['properties']);
+		$properties = (array) $inputSchema['properties'];
+		$this->assertArrayHasKey('text', $properties);
 		$required = $inputSchema['required'] ?? [];
 		$this->assertContains('text', $required);
 	}

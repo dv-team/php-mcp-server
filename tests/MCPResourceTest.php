@@ -16,7 +16,7 @@ class MCPResourceTest extends TestCase {
 			uri: 'file://example.txt',
 			name: 'Example file',
 			description: 'Example resource',
-			handler: static fn (object $args): string => 'ignored',
+			handler: static fn (object $args): array => [['uri' => 'file://example.txt', 'text' => 'ignored']],
 			mimeType: 'text/plain',
 			properties: [
 				'path' => ['type' => 'string', 'description' => 'path'],

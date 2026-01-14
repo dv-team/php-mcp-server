@@ -30,7 +30,7 @@ class MCPToolInputSchema implements JsonSerializable {
 	/**
 	 * @return array{
 	 *     type: 'object',
-	 *     properties: array<string, array<string, mixed>>,
+	 *     properties: array<string, array<string, mixed>>|object,
 	 *     required?: string[]
 	 * }
 	 */

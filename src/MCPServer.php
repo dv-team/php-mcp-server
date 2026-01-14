@@ -9,7 +9,6 @@ use McpSrv\Common\Response\ResponseHandlerInterface;
 use McpSrv\Types\MCPPrompt;
 use McpSrv\Types\Prompts\MCPPromptArguments;
 use McpSrv\Types\Prompts\MCPPromptResult;
-use McpSrv\Types\Prompts\PromptResult\PromptResultMessage;
 use McpSrv\Types\Tools\MCPTool;
 use McpSrv\Types\Tools\MCPToolInputSchema;
 use McpSrv\Types\Tools\MCPToolResult;
@@ -56,7 +55,7 @@ use Throwable;
  * }
  */
 class MCPServer {
-	/** @var array<string, PromptResultMessage[]> */
+	/** @var array<string, MCPPrompt> */
 	private array $prompts = [];
 	
 	/** @var array<string, MCPTool> */
@@ -79,13 +78,13 @@ class MCPServer {
 	 * @param string $name
 	 * @param string $description
 	 * @param MCPPromptArguments $arguments
-	 * @param callable(object): TResourceResult[] $handler
+	 * @param callable(object): MCPPromptResult $handler
 	 */
 	public function registerPrompt(
 		string $name,
 		string $description,
 		MCPPromptArguments $arguments,
-		$handler,
+		callable $handler,
 	): void {
 		$this->prompts[$name] = new MCPPrompt(
 			description: $description,
@@ -135,7 +134,7 @@ class MCPServer {
 	 * @param string $uriTemplate
 	 * @param string $description
 	 * @param TResourceTemplateProperty[] $properties
-	 * @param callable(object $arguments): string $handler
+	 * @param callable(object $arguments): TResourceResult[] $handler
 	 * @return void
 	 */
 	public function registerResourceTemplate(string $uriTemplate, string $description, array $properties, callable $handler): void {
@@ -360,7 +359,7 @@ class MCPServer {
 			$handler = $resource['handler'];
 			$result = $handler($arguments);
 
-			return ['contents' => $result];
+			return ['contents' => array_values($result)];
 		}
 
 		foreach($this->resourceTemplates as $template) {
@@ -375,7 +374,7 @@ class MCPServer {
 				$handler = $template['handler'];
 				$result = $handler((object) $arguments);
 
-				return ['contents' => $result];
+				return ['contents' => array_values($result)];
 			}
 		}
 

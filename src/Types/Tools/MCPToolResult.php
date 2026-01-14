@@ -13,7 +13,7 @@ use JsonSerializable;
  */
 class MCPToolResult implements JsonSerializable {
 	/**
-	 * @param object|array<array-key, null|scalar|object|array<array-key, mixed>> $content
+	 * @param object|array<array-key, mixed> $content
 	 * @param bool $isError
 	 */
 	public function __construct(

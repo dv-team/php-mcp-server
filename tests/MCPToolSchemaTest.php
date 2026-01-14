@@ -13,6 +13,19 @@ use McpSrv\Types\Tools\MCPToolProperties;
 use PHPUnit\Framework\TestCase;
 
 class MCPToolSchemaTest extends TestCase {
+	public function testEmptySchemaPropertiesSerializeAsObject(): void {
+		$schema = new MCPToolInputSchema(
+			properties: new MCPToolProperties(),
+			required: []
+		);
+		
+		$serialized = $schema->jsonSerialize();
+		
+		self::assertArrayHasKey('properties', $serialized);
+		self::assertIsObject($serialized['properties']);
+		self::assertSame([], (array) $serialized['properties']);
+	}
+	
 	public function testRequiredFieldsAreMergedAndUnique(): void {
 		$schema = new MCPToolInputSchema(
 			properties: new MCPToolProperties(
@@ -44,8 +57,11 @@ class MCPToolSchemaTest extends TestCase {
 		);
 		
 		$serialized = $enum->jsonSerialize();
+		$serialized = (array) $serialized;
 		
 		$this->assertSame('array', $serialized['type']);
+		$this->assertArrayHasKey('items', $serialized);
+		$this->assertIsArray($serialized['items']);
 		$this->assertSame('string', $serialized['items']['type']);
 		$this->assertSame(['a', 'b', 'c'], $serialized['items']['enum']);
 		
