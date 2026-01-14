@@ -6,7 +6,7 @@ use InvalidArgumentException;
 use McpSrv\Types\Tools\MCPToolProperty;
 
 /**
- * @phpstan-type TEnumStruct array{
+ * @phpstan-type TEnumStruct object{
  *     type: 'array',
  *     description: string,
  *     required: bool,
@@ -61,7 +61,7 @@ readonly class MCPToolEnum implements MCPToolProperty {
 	/**
 	 * @return TEnumStruct
 	 */
-	public function jsonSerialize(): array {
+	public function jsonSerialize(): object {
 		$optionTypes = array_map('get_debug_type', $this->options);
 		$uniqueTypes = array_values(array_unique($optionTypes));
 		
@@ -108,6 +108,6 @@ readonly class MCPToolEnum implements MCPToolProperty {
 			$result['default'] = $this->default;
 		}
 		
-		return $result;
+		return (object) $result;
 	}
 }

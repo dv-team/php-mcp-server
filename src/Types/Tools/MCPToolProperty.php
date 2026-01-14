@@ -9,7 +9,7 @@ interface MCPToolProperty extends JsonSerializable {
 	public function isRequired(): bool;
 	
 	/**
-	 * @return array{type: string}
+	 * @return object{type: string}
 	 */
-	public function jsonSerialize(): array;
+	public function jsonSerialize(): object;
 }

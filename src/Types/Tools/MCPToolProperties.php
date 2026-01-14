@@ -32,14 +32,14 @@ class MCPToolProperties implements JsonSerializable, IteratorAggregate {
 	}
 	
 	/**
-	 * @return array<string, array<string, mixed>>
+	 * @return object
 	 */
-	public function jsonSerialize(): array {
+	public function jsonSerialize(): object {
 		$result = [];
 		foreach($this->properties as $property) {
 			$result[$property->getName()] = $property->jsonSerialize();
 		}
-		return $result;
+		return (object) $result;
 	}
 	
 	public function getIterator(): Traversable {

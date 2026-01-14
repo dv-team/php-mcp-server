@@ -5,7 +5,7 @@ namespace McpSrv\Common\Properties;
 use McpSrv\Types\Tools\MCPToolProperty;
 
 /**
- * @phpstan-type TFloatStruct array{
+ * @phpstan-type TFloatStruct object{
  *     type: 'number',
  *     description: string,
  *     required: bool,
@@ -37,7 +37,7 @@ class MCPToolFloat implements MCPToolProperty {
 	/**
 	 * @return TFloatStruct
 	 */
-	public function jsonSerialize(): array {
+	public function jsonSerialize(): object {
 		$result = [
 			'type' => 'number',
 			'description' => $this->description,
@@ -60,6 +60,6 @@ class MCPToolFloat implements MCPToolProperty {
 			$result['default'] = $this->default;
 		}
 		
-		return $result;
+		return (object) $result;
 	}
 }

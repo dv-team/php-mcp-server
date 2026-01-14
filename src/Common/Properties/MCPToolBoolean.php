@@ -5,7 +5,7 @@ namespace McpSrv\Common\Properties;
 use McpSrv\Types\Tools\MCPToolProperty;
 
 /**
- * @phpstan-type TBooleanStruct array{
+ * @phpstan-type TBooleanStruct object{
  *     type: 'boolean',
  *     description: string,
  *     required: bool,
@@ -31,7 +31,7 @@ readonly class MCPToolBoolean implements MCPToolProperty {
 	/**
 	 * @return TBooleanStruct
 	 */
-	public function jsonSerialize(): array {
+	public function jsonSerialize(): object {
 		$result = [
 			'type' => 'boolean',
 			'description' => $this->description,
@@ -42,6 +42,6 @@ readonly class MCPToolBoolean implements MCPToolProperty {
 			$result['default'] = $this->default;
 		}
 		
-		return $result;
+		return (object) $result;
 	}
 }

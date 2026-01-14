@@ -5,7 +5,7 @@ namespace McpSrv\Common\Properties;
 use McpSrv\Types\Tools\MCPToolProperty;
 
 /**
- * @phpstan-type TStringStruct array{
+ * @phpstan-type TStringStruct object{
  *     type: 'string',
  *     description: string,
  *     required: bool,
@@ -35,7 +35,7 @@ class MCPToolString implements MCPToolProperty {
 	/**
 	 * @return TStringStruct
 	 */
-	public function jsonSerialize(): array {
+	public function jsonSerialize(): object {
 		$result = [
 			'type' => 'string',
 			'description' => $this->description,
@@ -54,6 +54,6 @@ class MCPToolString implements MCPToolProperty {
 			$result['default'] = $this->default;
 		}
 		
-		return $result;
+		return (object) $result;
 	}
 }

@@ -5,7 +5,7 @@ namespace McpSrv\Common\Properties;
 use McpSrv\Types\Tools\MCPToolProperty;
 
 /**
- * @phpstan-type TIntegerStruct array{
+ * @phpstan-type TIntegerStruct object{
  *     type: 'integer',
  *     description: string,
  *     required: bool,
@@ -37,7 +37,7 @@ class MCPToolInteger implements MCPToolProperty {
 	/**
 	 * @return TIntegerStruct
 	 */
-	public function jsonSerialize(): array {
+	public function jsonSerialize(): object {
 		$result = [
 			'type' => 'integer',
 			'description' => $this->description,
@@ -60,6 +60,6 @@ class MCPToolInteger implements MCPToolProperty {
 			$result['default'] = $this->default;
 		}
 		
-		return $result;
+		return (object) $result;
 	}
 }

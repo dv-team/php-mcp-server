@@ -6,11 +6,11 @@ use McpSrv\Types\Tools\MCPToolProperties;
 use McpSrv\Types\Tools\MCPToolProperty;
 
 /**
- * @phpstan-type TObjectStruct array{
+ * @phpstan-type TObjectStruct object{
  *     type: 'object',
  *     description: string,
  *     required: bool,
- *     properties: array<string, array<string, mixed>>,
+ *     properties: object,
  *     minProperties?: int,
  *     maxProperties?: int,
  *     additionalProperties?: bool,
@@ -50,7 +50,7 @@ class MCPToolObject implements MCPToolProperty {
 	/**
 	 * @return TObjectStruct
 	 */
-	public function jsonSerialize(): array {
+	public function jsonSerialize(): object {
 		$result = [
 			'type' => 'object',
 			'description' => $this->description,
@@ -74,6 +74,6 @@ class MCPToolObject implements MCPToolProperty {
 			$result['requiredProperties'] = $this->requiredProperties;
 		}
 		
-		return $result;
+		return (object) $result;
 	}
 }
