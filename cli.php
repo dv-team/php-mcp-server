@@ -28,21 +28,7 @@ $server->registerTool(
 	description: 'Tells the current ISO 8601',
 	inputSchema: new MCPToolInputSchema(new MCPToolProperties(), required: []),
 	isDangerous: false,
-	handler: fn(object $args): MCPToolResult => new MCPToolResult(content: ['current_date' => date('c')], isError: false)
+	handler: fn(object $args): MCPToolResult => new MCPToolResult(content: ['current_iso8601' => (new DateTimeImmutable())->format('c')], isError: false)
 );
 
-$fp = fopen('php://stdin', 'rb');
-if($fp === false) {
-	throw new RuntimeException('Failed to open stdin');
-}
-while(!feof($fp)) {
-	$line = fgets($fp, null);
-	if($line === false) {
-		continue;
-	}
-	
-	$fileLogger->info("IN", (array) json_decode(json: $line, associative: false, flags: JSON_THROW_ON_ERROR));
-	
-	$server->run($line);
-}
-$fileLogger->info('SYSTEM: Server stopped');
+$server->runCli(STDIN);
