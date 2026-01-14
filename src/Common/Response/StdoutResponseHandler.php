@@ -16,7 +16,7 @@ class StdoutResponseHandler implements ResponseHandlerInterface {
 			'result' => $result
 		];
 		$jsonData = json_encode($errorContents, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-		$this->logger?->info("Success", $errorContents);
+		$this->logger?->info("OUT", $errorContents);
 		printf("%s\n", $jsonData);
 	}
 	
@@ -27,7 +27,7 @@ class StdoutResponseHandler implements ResponseHandlerInterface {
 			'error' => ['code' => $code, 'message' => $message]
 		];
 		$jsonData = json_encode($errorContents, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-		$this->logger?->error("Failure", [$errorContents]);
+		$this->logger?->error("OUT", [$errorContents]);
 		printf("%s\n", $jsonData);
 	}
 }
