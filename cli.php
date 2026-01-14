@@ -2,6 +2,9 @@
 
 use McpSrv\Common\Response\StdoutResponseHandler;
 use McpSrv\MCPServer;
+use McpSrv\Types\Tools\MCPToolInputSchema;
+use McpSrv\Types\Tools\MCPToolProperties;
+use McpSrv\Types\Tools\MCPToolResult;
 use Psr\Log\AbstractLogger;
 
 require __DIR__ . '/vendor/autoload.php';
@@ -9,15 +12,24 @@ require __DIR__ . '/vendor/autoload.php';
 $fileLogger = new class extends AbstractLogger {
 	public function log($level, string|Stringable $message, array $context = []): void {
 		/** @var string $level */
-		$logMessage = sprintf("[%s] %s: %s\n", date('Y-m-d H:i:s'), strtoupper($level), $message);
+		$logMessage = sprintf("[%s] %s: %s", date('Y-m-d H:i:s'), strtoupper($level), trim($message));
 		if (!empty($context)) {
-			$logMessage .= 'Context: ' . json_encode($context) . "\n";
+			$logMessage .= ' ' . json_encode(value: $context, flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 		}
+		$logMessage .= "\n";
 		file_put_contents(__DIR__ . '/stdio–mcp.log', $logMessage, FILE_APPEND);
 	}
 };
 
 $server = new MCPServer('Example server', new StdoutResponseHandler($fileLogger));
+
+$server->registerTool(
+	name: 'tell_date_and_time',
+	description: 'Tells the current ISO 8601',
+	inputSchema: new MCPToolInputSchema(new MCPToolProperties(), required: []),
+	isDangerous: false,
+	handler: fn(object $args): MCPToolResult => new MCPToolResult(content: ['current_date' => date('c')], isError: false)
+);
 
 $fp = fopen('php://stdin', 'rb');
 if($fp === false) {
@@ -29,7 +41,8 @@ while(!feof($fp)) {
 		continue;
 	}
 	
-	file_put_contents(__DIR__ . '/stdio–mcp.log', "IN  ".trim($line)."\n", FILE_APPEND);
+	$fileLogger->info("IN", (array) json_decode(json: $line, associative: false, flags: JSON_THROW_ON_ERROR));
 	
 	$server->run($line);
 }
+$fileLogger->info('SYSTEM: Server stopped');
