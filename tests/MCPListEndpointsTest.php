@@ -33,11 +33,7 @@ class MCPListEndpointsTest extends TestCase {
 			)
 		);
 
-		$request = json_encode([
-			'method' => 'prompts/list',
-			'id' => 21,
-			'params' => (object) [],
-		], JSON_THROW_ON_ERROR);
+		$request = json_encode(['method' => 'prompts/list', 'id' => 21, 'params' => (object) []], JSON_THROW_ON_ERROR);
 
 		$server->run($request);
 

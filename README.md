@@ -1,6 +1,6 @@
 # PHP MCP Server
 
-This project demonstrates a simple PHP-based MCP Server for handling processes that require near-instant responses (as no support for streaming is intended to get a simpler interface). It is designed for flexibility and can be adapted to various environments, such as database schema retrieval, prompt output, filesystem tasks, and more.
+This project demonstrates a simple PHP-based MCP Server (JSON-RPC) for handling requests that can respond immediately. It is designed for flexibility and can be adapted to various environments, such as database schema retrieval, prompt output, filesystem tasks, and more.
 
 ## High-Level Goals
 
@@ -27,9 +27,48 @@ composer install
 php -S 127.0.0.1:8080 public/index.php
 ```
 
-Use `test.http` to exercise the JSON-RPC methods against the running server.
+The server listens on `http://127.0.0.1:8080/` (POST JSON bodies). A few quick calls:
+
+```bash
+curl -sS http://127.0.0.1:8080/ \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"0.0"}}}'
+```
+
+```bash
+curl -sS http://127.0.0.1:8080/ \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+```
+
+Use `test.http` to exercise the JSON-RPC methods; replace the host (`https://php-mcp.localhost/`) with `http://127.0.0.1:8080/` if needed.
+
+Logs are written to `public/stdio-mcp.log`.
+
+### Implemented JSON-RPC methods
+
+- `initialize` (returns `protocolVersion: 2025-03-26`)
+- `notifications/initialized` (accepted; no response)
+- `prompts/list`, `prompts/get`
+- `tools/list`, `tools/call`
+- `resources/list`, `resources/read`
+- `resources/templates/list`
+
+### CLI server (main)
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"cli","version":"0.0"}}}' | php cli.php
+```
+
+Logs are written to `stdio–mcp.log` (note the filename contains an en dash `–`).
 
 ### Example servers
+
+The `examples/` folder is a separate Composer project. Install its dependencies first:
+
+```bash
+(cd examples && composer install)
+```
 
 HTTP sample that loads prompts/tools from `examples/prompts` and exposes demo tools:
 
@@ -40,7 +79,7 @@ php -S 127.0.0.1:8080 examples/src/prompts-and-tools-http.php
 STDIN sample that logs requests/responses to `examples/src/stdio–mcp.log`:
 
 ```bash
-php examples/src/prompts-and-tools-cli.php < request.json
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"cli","version":"0.0"}}}' | php examples/src/prompts-and-tools-cli.php
 ```
 
 ## Example: Registering Prompts

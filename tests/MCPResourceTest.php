@@ -16,8 +16,6 @@ class MCPResourceTest extends TestCase {
 			uri: 'file://example.txt',
 			name: 'Example file',
 			description: 'Example resource',
-			handler: static fn (object $args): array => [['uri' => 'file://example.txt', 'text' => 'ignored']],
-			mimeType: 'text/plain',
 			properties: [
 				'path' => ['type' => 'string', 'description' => 'path'],
 			],
@@ -39,14 +37,11 @@ class MCPResourceTest extends TestCase {
 		$result = $handler->reply['result'];
 		$this->assertCount(1, $result['resources']);
 
-		/** @var array{name: string, uri: string, mimeType?: string, inputSchema: array{required?: array<int, string>, properties: array<string, mixed>}} $resource */
+		/** @var array{name: string, uri: string, inputSchema: array{required?: array<int, string>, properties: array<string, mixed>}} $resource */
 		$resource = $result['resources'][0];
 		$this->assertSame('Example file', $resource['name']);
 		$this->assertSame('file://example.txt', $resource['uri']);
-		if(!array_key_exists('mimeType', $resource)) {
-			self::fail('Expected mimeType on resource');
-		}
-		$this->assertSame('text/plain', $resource['mimeType']);
+		$this->assertArrayNotHasKey('mimeType', $resource);
 		$this->assertArrayHasKey('inputSchema', $resource);
 		$inputSchema = $resource['inputSchema'];
 		$required = $inputSchema['required'] ?? [];

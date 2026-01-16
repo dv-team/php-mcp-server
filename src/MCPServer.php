@@ -4,11 +4,13 @@ namespace McpSrv;
 
 use JsonException;
 use McpSrv\Common\MCPException;
+use McpSrv\Common\MCPGeneralException;
 use McpSrv\Common\MCPInvalidArgumentException;
 use McpSrv\Common\Response\ResponseHandlerInterface;
 use McpSrv\Types\MCPPrompt;
 use McpSrv\Types\Prompts\MCPPromptArguments;
 use McpSrv\Types\Prompts\MCPPromptResult;
+use McpSrv\Types\Resources\MCPResource;
 use McpSrv\Types\Tools\MCPTool;
 use McpSrv\Types\Tools\MCPToolInputSchemaInterface;
 use McpSrv\Types\Tools\MCPToolResult;
@@ -35,24 +37,22 @@ use Throwable;
  *     required?: string[]
  * }
  *
- * @phpstan-type TResourceResult array{uri: string, mimeType?: string, text: string}
- *
  * @phpstan-type TResource array{
  *     uri: string,
  *     name: string,
  *     description: null|string,
  *     mimeType: null|string,
- *     inputSchema: TResourceInputSchema,
- *     handler: callable(object): TResourceResult[]
+ *     inputSchema: TResourceInputSchema
  * }
+ *
+ * @phpstan-type TResourceHandler callable(object{uri: string, arguments: object}): Resource[]
  *
  * @phpstan-type TResourceTemplateProperty array{type: string, name: string, description?: string, required?: bool}
  *
  * @phpstan-type TResourceTemplate array{
  *     uriTemplate: string,
  *     description?: string,
- *     properties: TResourceTemplateProperty[],
- *     handler: callable(object): TResourceResult[]
+ *     properties: TResourceTemplateProperty[]
  * }
  */
 class MCPServer {
@@ -64,6 +64,9 @@ class MCPServer {
 
 	/** @var array<string, TResource> */
 	private array $resources = [];
+
+	/** @var null|TResourceHandler */
+	private $resourceHandler = null;
 
 	/** @var array<string, TResourceTemplate> */
 	private array $resourceTemplates = [];
@@ -98,8 +101,6 @@ class MCPServer {
 	 * @param string $uri
 	 * @param string $name
 	 * @param null|string $description
-	 * @param callable(object): TResourceResult[] $handler
-	 * @param null|string $mimeType
 	 * @param array<string, mixed> $properties
 	 * @param string[] $required
 	 */
@@ -107,7 +108,6 @@ class MCPServer {
 		string $uri,
 		string $name,
 		?string $description,
-		callable $handler,
 		?string $mimeType = null,
 		array $properties = [],
 		array $required = []
@@ -124,18 +124,24 @@ class MCPServer {
 		$this->resources[$uri] = [
 			'uri' => $uri,
 			'name' => $name,
-			'description' => $description,
 			'mimeType' => $mimeType,
+			'description' => $description,
 			'inputSchema' => $inputSchema,
-			'handler' => $handler,
 		];
+	}
+
+	/**
+	 * @param TResourceHandler $handler
+	 */
+	public function registerResourceHandler(callable $handler): void {
+		$this->resourceHandler = $handler;
 	}
 
 	/**
 	 * @param string $uriTemplate
 	 * @param string $description
 	 * @param TResourceTemplateProperty[] $properties
-	 * @param callable(object $arguments): TResourceResult[] $handler
+	 * @param callable(object $arguments): iterable<Resource> $handler
 	 * @return void
 	 */
 	public function registerResourceTemplate(string $uriTemplate, string $description, array $properties, callable $handler): void {
@@ -337,7 +343,7 @@ class MCPServer {
 
 	/**
 	 * @param object $params
-	 * @return array{resources: list<array{name: string, uri: string, description?: string|null, mimeType?: string|null, inputSchema?: TResourceInputSchema}>}
+	 * @return array{resources: list<array{name: string, uri: string, description?: string|null, inputSchema?: TResourceInputSchema}>}
 	 */
 	private function listResources(object $params): array {
 		$resources = [];
@@ -367,7 +373,7 @@ class MCPServer {
 
 	/**
 	 * @param object $params
-	 * @return array{contents: list<array{uri: string, mimeType?: string, text: string}>}
+	 * @return array{contents: MCPResource[]}
 	 * @throws MCPInvalidArgumentException
 	 */
 	private function readResource(object $params): array {
@@ -378,15 +384,38 @@ class MCPServer {
 		$arguments = property_exists($params, 'arguments') && is_object($params->arguments) ? $params->arguments : new \stdClass();
 
 		if(array_key_exists($params->uri, $this->resources)) {
-			$resource = $this->resources[$params->uri];
+			if($this->resourceHandler === null) {
+				throw new MCPGeneralException('No resource handler registered', 500);
+			}
+			$handler = $this->resourceHandler;
 
-			$handler = $resource['handler'];
-			$result = $handler($arguments);
+			/** @var iterable<MCPResource> $resources */
+			$resources = $handler((object) [
+				'uri' => $params->uri,
+				'arguments' => $arguments,
+			]);
 
-			return ['contents' => array_values($result)];
+			$result = [];
+			foreach($resources as $resource) {
+				$resource->uri ??= $params->uri;
+				$result[] = $resource;
+			}
+
+			return ['contents' => $result];
 		}
 
 		foreach($this->resourceTemplates as $template) {
+			if($this->resourceHandler === null) {
+				throw new MCPGeneralException('No resource handler registered', 500);
+			}
+			$handler = $this->resourceHandler;
+
+			/** @var iterable<MCPResource> $resources */
+			$resources = $handler((object) [
+				'uri' => $params->uri,
+				'arguments' => $arguments,
+			]);
+
 			$regex = sprintf('{%s}', preg_replace('{\{([a-zA-Z_][a-zA-Z0-9_]*)\}}', '(?<$1>[^/]+)', $template['uriTemplate']));
 
 			if(preg_match($regex, $params->uri, $matches)) {
@@ -395,10 +424,12 @@ class MCPServer {
 					$arguments[$property['name']] = $matches[$property['name']] ?? null;
 				}
 
-				$handler = $template['handler'];
-				$result = $handler((object) $arguments);
-
-				return ['contents' => array_values($result)];
+				$result = [];
+				foreach($resources as $resource) {
+					$resource->uri ??= $params->uri;
+					$result[] = $resource;
+				}
+				return ['contents' => $result];
 			}
 		}
 
