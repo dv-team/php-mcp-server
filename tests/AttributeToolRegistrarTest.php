@@ -13,9 +13,8 @@ class AttributeToolRegistrarTest extends TestCase {
 	public function testRegisterBuildsInputSchemaFromAttributes(): void {
 		$handler = new CapturingResponseHandler();
 		$server = new MCPServer('test', $handler);
-		$registrar = new AttributeToolRegistrar();
 
-		$registrar->register(new AttributeToolRegistrarFixture(), $server);
+		AttributeToolRegistrar::register(new AttributeToolRegistrarFixture(), $server);
 
 		$request = json_encode([
 			'method' => 'tools/list',
@@ -71,9 +70,8 @@ class AttributeToolRegistrarTest extends TestCase {
 	public function testInvokeToolHandlesDefaultsAndMissingArgs(): void {
 		$handler = new CapturingResponseHandler();
 		$server = new MCPServer('test', $handler);
-		$registrar = new AttributeToolRegistrar();
 
-		$registrar->register(new AttributeToolRegistrarFixture(), $server);
+		AttributeToolRegistrar::register(new AttributeToolRegistrarFixture(), $server);
 
 		$request = json_encode([
 			'method' => 'tools/call',
@@ -96,9 +94,8 @@ class AttributeToolRegistrarTest extends TestCase {
 
 		$handler = new CapturingResponseHandler();
 		$server = new MCPServer('test', $handler);
-		$registrar = new AttributeToolRegistrar();
 
-		$registrar->register(new AttributeToolRegistrarFixture(), $server);
+		AttributeToolRegistrar::register(new AttributeToolRegistrarFixture(), $server);
 
 		$request = json_encode([
 			'method' => 'tools/call',

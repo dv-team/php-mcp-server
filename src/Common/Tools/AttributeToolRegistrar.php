@@ -16,11 +16,7 @@ use ReflectionNamedType;
 use ReflectionParameter;
 
 class AttributeToolRegistrar {
-	public function __construct(
-		private readonly bool $isDangerous = false,
-	) {}
-
-	public function register(object $toolCollection, MCPServer $server, ?bool $isDangerous = null): void {
+	public static function register(object $toolCollection, MCPServer $server, bool $isDangerous = false): void {
 		$reflection = new ReflectionClass($toolCollection);
 
 		foreach($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
@@ -33,15 +29,15 @@ class AttributeToolRegistrar {
 			/** @var MCPToolAttribute $toolAttribute */
 			$toolAttribute = $attributes[0]->newInstance();
 
-			$inputSchema = $this->buildInputSchema($toolAttribute->parametersSchema, $method);
+			$inputSchema = self::buildInputSchema($toolAttribute->parametersSchema, $method);
 
 			$server->registerTool(
 				name: $toolAttribute->name,
 				description: $toolAttribute->description,
 				inputSchema: $inputSchema,
-				isDangerous: $isDangerous ?? $this->isDangerous,
-				handler: function(object $arguments) use ($toolCollection, $method): MCPToolResult {
-					return $this->invokeTool($toolCollection, $method, $arguments);
+				isDangerous: $isDangerous,
+				handler: static function(object $arguments) use ($toolCollection, $method): MCPToolResult {
+					return self::invokeTool($toolCollection, $method, $arguments);
 				},
 				returnSchema: $toolAttribute->returnSchema
 			);
@@ -51,7 +47,7 @@ class AttributeToolRegistrar {
 	/**
 	 * @param object $schema
 	 */
-	private function buildInputSchema(object $schema, ReflectionMethod $method): MCPToolInputSchema {
+	private static function buildInputSchema(object $schema, ReflectionMethod $method): MCPToolInputSchema {
 		$properties = $schema->properties ?? [];
 		if(!is_array($properties)) {
 			throw new MCPInvalidArgumentException('parametersSchema must contain a properties map');
@@ -70,7 +66,7 @@ class AttributeToolRegistrar {
 			}
 		}
 
-		$parameterDescriptions = $this->getParameterDescriptions($method);
+		$parameterDescriptions = self::getParameterDescriptions($method);
 		$parameters = $method->getParameters();
 
 		foreach($parameters as $parameter) {
@@ -82,7 +78,7 @@ class AttributeToolRegistrar {
 					continue;
 				}
 
-				$type = $this->mapParameterType($parameter);
+				$type = self::mapParameterType($parameter);
 
 				if($type === null) {
 					throw new MCPInvalidArgumentException("Cannot derive schema for parameter '$name' without a type");
@@ -113,7 +109,7 @@ class AttributeToolRegistrar {
 
 				foreach($parameters as $parameter) {
 					if($parameter->getName() === $name) {
-						$type = $this->mapParameterType($parameter);
+						$type = self::mapParameterType($parameter);
 						break;
 					}
 				}
@@ -143,7 +139,7 @@ class AttributeToolRegistrar {
 	/**
 	 * @return array<string, string>
 	 */
-	private function getParameterDescriptions(ReflectionMethod $method): array {
+	private static function getParameterDescriptions(ReflectionMethod $method): array {
 		$descriptions = [];
 
 		foreach($method->getParameters() as $parameter) {
@@ -161,7 +157,7 @@ class AttributeToolRegistrar {
 		return $descriptions;
 	}
 
-	private function invokeTool(object $tool, ReflectionMethod $method, object $arguments): MCPToolResult {
+	private static function invokeTool(object $tool, ReflectionMethod $method, object $arguments): MCPToolResult {
 		$parameterValues = [];
 
 		foreach($method->getParameters() as $parameter) {
@@ -205,7 +201,7 @@ class AttributeToolRegistrar {
 		);
 	}
 
-	private function mapParameterType(ReflectionParameter $parameter): ?string {
+	private static function mapParameterType(ReflectionParameter $parameter): ?string {
 		$type = $parameter->getType();
 
 		if(!($type instanceof ReflectionNamedType)) {

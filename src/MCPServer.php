@@ -7,6 +7,7 @@ use McpSrv\Common\MCPException;
 use McpSrv\Common\MCPGeneralException;
 use McpSrv\Common\MCPInvalidArgumentException;
 use McpSrv\Common\Response\ResponseHandlerInterface;
+use McpSrv\Common\Tools\AttributeToolRegistrar;
 use McpSrv\Types\MCPPrompt;
 use McpSrv\Types\Prompts\MCPPromptArguments;
 use McpSrv\Types\Prompts\MCPPromptResult;
@@ -153,6 +154,10 @@ class MCPServer {
 		];
 	}
 
+	public function registerToolsFromObject(object $obj): void {
+		AttributeToolRegistrar::register($obj, $this);
+	}
+
 	/**
 	 * @param string $name
 	 * @param string $description
@@ -160,7 +165,6 @@ class MCPServer {
 	 * @param bool $isDangerous
 	 * @param callable(object): MCPToolResult $handler
 	 * @param null|object $returnSchema
-	 * @return void
 	 */
 	public function registerTool(
 		string $name,
@@ -169,7 +173,7 @@ class MCPServer {
 		bool $isDangerous,
 		$handler,
 		?object $returnSchema = null
-	) {
+	): void {
 		$this->tools[$name] = new MCPTool(
 			name: $name,
 			description: $description,
