@@ -15,6 +15,9 @@ use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionParameter;
 
+/**
+ * @internal Use {@see MCPServer} instead.
+ */
 class AttributeToolRegistrar {
 	public static function register(object $toolCollection, MCPServer $server, bool $isDangerous = false): void {
 		$reflection = new ReflectionClass($toolCollection);
