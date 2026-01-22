@@ -3,6 +3,7 @@
     "description": "Basic and easy to use PHP based MCP Server",
     "type": "library",
     "license": "MIT",
+    "homepage": "https://github.com/dv-team/php-mcp-server",
     "keywords": ["mcp", "server", "php"],
     "authors": [{
         "name": "Ron Kirschler",
