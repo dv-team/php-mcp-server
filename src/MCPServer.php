@@ -207,7 +207,7 @@ class MCPServer {
 		$this->logger?->debug('SYSTEM: Server stopped');
 	}
 
-	public function run(string $input): void {
+	private function run(string $input): void {
 		if(trim($input) === '') {
 			$this->responseHandler->replyError(0, 'Empty input body', 100);
 			return;
