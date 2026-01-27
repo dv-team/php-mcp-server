@@ -5,7 +5,7 @@ This project demonstrates a simple PHP-based MCP Server (JSON-RPC) for handling 
 ## High-Level Goals
 
 - **Simple PHP and PHP-esque MCP Server** for processes that can respond (near) immediately.
-- **HTTP and STDIN samples** for quick testing; no streaming support.
+- **STDIO sample** for quick testing; no streaming support.
 - **Versatile usage**: Suitable for a wide range of environments, including database, prompt handling, and filesystem operations.
 
 ## Requirements
@@ -21,30 +21,6 @@ composer install
 
 ## Usage
 
-### HTTP server (main)
-
-```bash
-php -S 127.0.0.1:8080 public/index.php
-```
-
-The server listens on `http://127.0.0.1:8080/` (POST JSON bodies). A few quick calls:
-
-```bash
-curl -sS http://127.0.0.1:8080/ \
-  -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"0.0"}}}'
-```
-
-```bash
-curl -sS http://127.0.0.1:8080/ \
-  -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
-```
-
-Use `test.http` to exercise the JSON-RPC methods; replace the host (`https://php-mcp.localhost/`) with `http://127.0.0.1:8080/` if needed.
-
-Logs are written to `public/stdio-mcp.log`.
-
 ### Implemented JSON-RPC methods
 
 - `initialize` (returns `protocolVersion: 2025-03-26`)
@@ -54,13 +30,37 @@ Logs are written to `public/stdio-mcp.log`.
 - `resources/list`, `resources/read`
 - `resources/templates/list`
 
-### CLI server (main)
+### STDIO server (main)
 
 ```bash
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"cli","version":"0.0"}}}' | php cli.php
 ```
 
 Logs are written to `stdio–mcp.log` (note the filename contains an en dash `–`).
+
+### Streamable-HTTP via supergateway (optional)
+
+This server speaks STDIO only. If you need Streamable-HTTP, use the `supergateway` tool to bridge STDIO to HTTP while keeping the PHP server unchanged.
+
+Short example (stdio → Streamable-HTTP):
+
+```bash
+npx -y supergateway --stdio "php cli.php" --outputTransport streamableHttp --port 8000
+```
+
+The Streamable-HTTP endpoint defaults to `http://localhost:8000/mcp`. See the [`supergateway` README](https://github.com/supercorp-ai/supergateway) for more options.
+
+### Streamable-HTTP bridge via `src-http` (Bun)
+
+If you prefer a Bun-based Streamable-HTTP bridge (chunked HTTP), use the project in `src-http/` to connect the PHP MCP CLI to an HTTP endpoint:
+
+```bash
+cd src-http
+bun install
+MCP_CLI_CMD="php ../cli.php" bun run start
+```
+
+The Bun server exposes `POST /mcp` and forwards each request to the PHP CLI over STDIO. Configure OAuth2 and other options via `.env` (see `src-http/.env.example`).
 
 ### Example servers
 
@@ -70,13 +70,7 @@ The `examples/` folder is a separate Composer project. Install its dependencies 
 (cd examples && composer install)
 ```
 
-HTTP sample that loads prompts/tools from `examples/prompts` and exposes demo tools:
-
-```bash
-php -S 127.0.0.1:8080 examples/src/prompts-and-tools-http.php
-```
-
-STDIN sample that logs requests/responses to `examples/src/stdio–mcp.log`:
+STDIO sample that logs requests/responses to `examples/src/stdio–mcp.log`:
 
 ```bash
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"cli","version":"0.0"}}}' | php examples/src/prompts-and-tools-cli.php
@@ -84,7 +78,7 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
 
 ## Example: Registering Prompts
 
-The server uses YAML front-matter to parse Markdown files and register them as prompts, as shown in `examples/src/prompts-and-tools-http.php`:
+The server uses YAML front-matter to parse Markdown files and register them as prompts, as shown in `examples/src/prompts-and-tools-cli.php`:
 
 ```php
 $files = [
@@ -92,7 +86,7 @@ $files = [
 	__DIR__ . '/../prompts/behaviour--basic-rules.md'
 ];
 
-$responseHandler = new HttpResponseHandler();
+$responseHandler = new StdoutResponseHandler();
 $server = new MCPServer('Prompt provider example', $responseHandler);
 
 foreach($files as $file) {
