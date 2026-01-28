@@ -31,4 +31,4 @@ $server->registerTool(
 	handler: fn(object $args): MCPToolResult => new MCPToolResult(content: ['current_iso8601' => (new DateTimeImmutable())->format('c')], isError: false)
 );
 
-$server->runCli(STDIN);
+$server->runCli(STDIN, loop: false);
