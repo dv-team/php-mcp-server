@@ -186,10 +186,11 @@ class MCPServer {
 
 	/**
 	 * @param resource $resource
+	 * @param bool $loop
 	 * @return void
 	 * @throws JsonException
 	 */
-	public function runCli($resource = STDIN): void {
+	public function runCli($resource = STDIN, bool $loop = true): void {
 		if(!is_resource($resource)) {
 			throw new RuntimeException('Failed to open stdin');
 		}
@@ -203,6 +204,10 @@ class MCPServer {
 			$this->logger?->debug("IN", (array) json_decode(json: $line, associative: false, flags: JSON_THROW_ON_ERROR));
 
 			$this->run($line);
+
+			if(!$loop) {
+				break;
+			}
 		}
 		$this->logger?->debug('SYSTEM: Server stopped');
 	}
