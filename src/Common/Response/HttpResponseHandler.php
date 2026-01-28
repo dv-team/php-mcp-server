@@ -33,10 +33,11 @@ final class HttpResponseHandler implements ResponseHandlerInterface {
 	 * @param string|int $id
 	 * @param string $message
 	 * @param int $code
+	 * @param mixed $data
 	 * @return never
 	 * @throws JsonException
 	 */
-	public function replyError(string|int $id, string $message, int $code): never {
+	public function replyError(string|int $id, string $message, int $code, mixed $data = null): never {
 		header('Content-Type: application/json');
 		http_response_code(500);
 		$errorContents = [
@@ -44,6 +45,9 @@ final class HttpResponseHandler implements ResponseHandlerInterface {
 			'id' => $id,
 			'error' => ['code' => $code, 'message' => $message]
 		];
+		if($data !== null) {
+			$errorContents['error']['data'] = $data;
+		}
 		$jsonData = json_encode($errorContents, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 		$this->logger?->error("Failure", [$errorContents]);
 		echo $jsonData;

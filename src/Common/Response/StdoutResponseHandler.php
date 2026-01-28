@@ -20,12 +20,15 @@ class StdoutResponseHandler implements ResponseHandlerInterface {
 		printf("%s\n", $jsonData);
 	}
 	
-	public function replyError(int|string $id, string $message, int $code): void {
+	public function replyError(int|string $id, string $message, int $code, mixed $data = null): void {
 		$errorContents = [
 			'jsonrpc' => '2.0',
 			'id' => $id,
 			'error' => ['code' => $code, 'message' => $message]
 		];
+		if($data !== null) {
+			$errorContents['error']['data'] = $data;
+		}
 		$jsonData = json_encode($errorContents, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 		$this->logger?->error("OUT", [$errorContents]);
 		printf("%s\n", $jsonData);

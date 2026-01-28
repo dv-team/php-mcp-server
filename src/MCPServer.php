@@ -57,6 +57,8 @@ use Throwable;
  * }
  */
 class MCPServer {
+	private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-03-26'];
+
 	/** @var array<string, MCPPrompt> */
 	private array $prompts = [];
 	
@@ -212,7 +214,7 @@ class MCPServer {
 		$this->logger?->debug('SYSTEM: Server stopped');
 	}
 
-	private function run(string $input): void {
+	public function run(string $input): void {
 		if(trim($input) === '') {
 			$this->responseHandler->replyError(0, 'Empty input body', 100);
 			return;
@@ -230,7 +232,11 @@ class MCPServer {
 			$this->logger?->info("Request {$body->method}", ['body' => $body]);
 
 			if($body->method === 'initialize') {
-				$result = $this->initialize();
+				$params = property_exists($body, 'params') ? $body->params : null;
+				if(!is_object($params)) {
+					$params = (object) [];
+				}
+				$result = $this->initialize($params);
 			} elseif($body->method === 'notifications/initialized') {
 				http_response_code(202);
 				$result = null;
@@ -259,7 +265,7 @@ class MCPServer {
 				$this->responseHandler->reply($body->id, $result);
 			}
 		} catch(MCPException $e) {
-			$this->responseHandler->replyError($body->id, $e->getMessage(), $e->getCode() ?: 500);
+			$this->responseHandler->replyError($body->id, $e->getMessage(), $e->getCode() ?: 500, $e->getData());
 		} catch(Throwable) {
 			$this->responseHandler->replyError($body->id, 'Internal server error', 500);
 		}
@@ -276,7 +282,15 @@ class MCPServer {
 	 *     }
 	 * }
 	 */
-	private function initialize(): array {
+	private function initialize(object $params): array {
+		$protocolVersion = property_exists($params, 'protocolVersion') ? $params->protocolVersion : null;
+		if(!is_string($protocolVersion) || !in_array($protocolVersion, self::SUPPORTED_PROTOCOL_VERSIONS, true)) {
+			throw new MCPInvalidArgumentException(
+				'Unsupported protocol version',
+				-32602,
+				['supportedVersions' => self::SUPPORTED_PROTOCOL_VERSIONS]
+			);
+		}
 		$capabilities = [];
 
 		//'resources' => new stdClass(),
@@ -293,7 +307,7 @@ class MCPServer {
 		}
 
 		$result = [
-			'protocolVersion' => '2025-03-26',
+			'protocolVersion' => $protocolVersion,
 			'serverInfo' => ['name' => $this->name, 'version' => '1.0.0'],
 			'capabilities' => $capabilities
 		];
