@@ -62,6 +62,8 @@ MCP_CLI_CMD="php ../cli.php" bun run start
 
 The Bun server exposes `POST /mcp` and forwards each request to the PHP CLI over STDIO. Configure OAuth2 and other options via `.env` (see `src-http/.env.example`).
 
+Optional hot-reload: set `MCP_CLI_WATCH_FILE=/path/to/file`. When the file's mtime changes, the Bun bridge restarts the CLI process once there is no in-flight MCP request. This assumes the CLI server is stateless (no reinitialization needed).
+
 ### Example servers
 
 The `examples/` folder is a separate Composer project. Install its dependencies first:

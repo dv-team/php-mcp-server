@@ -37,6 +37,8 @@ Die OAuth2-Implementierung ist bewusst minimal und nutzt In-Memory Stores. Sie i
 
 - `PORT` (Standard: `8787`)
 - `MCP_CLI_CMD` (Standard: `php ../cli.php`)
+- `MCP_CLI_CWD` (optional, set the working directory for the CLI process)
+- `MCP_CLI_TRACE_STDOUT` (`true|false`, optional, echo MCP request/response lines to stdout)
 - `MCP_REQUIRE_AUTH` (`true|false`, Standard: `false`)
 - `OAUTH_CLIENT_ID` (Standard: `mcp-client`)
 - `OAUTH_CLIENT_SECRET` (Standard: `mcp-secret`)
@@ -51,6 +53,6 @@ Die OAuth2-Implementierung ist bewusst minimal und nutzt In-Memory Stores. Sie i
 
 ```bash
 curl -sS http://127.0.0.1:8787/mcp \
-  -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"0.0"}}}'
+    -H 'content-type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"0.0"}}}'
 ```

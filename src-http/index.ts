@@ -1,12 +1,16 @@
-import "dotenv/config";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
+import { config as loadEnv } from "dotenv";
+import { fileURLToPath } from "url";
+
+loadEnv({ path: fileURLToPath(new URL(".env", import.meta.url)) });
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 const config = {
 	port: Number.parseInt(process.env.PORT ?? "8787", 10),
 	cliCommand: process.env.MCP_CLI_CMD ?? "php ../cli.php",
+	cliWorkingDir: process.env.MCP_CLI_CWD?.trim() || "",
+	cliTraceStdout: (process.env.MCP_CLI_TRACE_STDOUT ?? "false") === "true",
 	requireAuth: (process.env.MCP_REQUIRE_AUTH ?? "false") === "true",
 	clientId: process.env.OAUTH_CLIENT_ID ?? "mcp-client",
 	clientSecret: process.env.OAUTH_CLIENT_SECRET ?? "mcp-secret",
@@ -46,6 +50,88 @@ type RefreshRecord = {
 const authCodes = new Map<string, AuthCodeRecord>();
 const accessTokens = new Map<string, TokenRecord>();
 const refreshTokens = new Map<string, RefreshRecord>();
+type CliProcess = Bun.Subprocess<"pipe", "pipe", "pipe">;
+
+function spawnCliProcess(): CliProcess {
+	const proc = Bun.spawn(["/bin/sh", "-lc", config.cliCommand], {
+		stdin: "pipe",
+		stdout: "pipe",
+		stderr: "pipe",
+		...(config.cliWorkingDir ? { cwd: config.cliWorkingDir } : {})
+	});
+
+	if (!proc.stdin || typeof proc.stdin === "number") {
+		throw new Error("CLI stdin is not available");
+	}
+	if (!proc.stdout || typeof proc.stdout === "number") {
+		throw new Error("CLI stdout is not available");
+	}
+	if (proc.stderr && typeof proc.stderr !== "number") {
+		void pumpStderr(proc, proc.stderr.getReader());
+	}
+
+	return proc;
+}
+
+async function writeCliPayload(proc: CliProcess, payload: Uint8Array): Promise<void> {
+	if (!proc.stdin || typeof proc.stdin === "number") {
+		throw new Error("CLI stdin is not available");
+	}
+	const writeResult = proc.stdin.write(payload);
+	if (writeResult instanceof Promise) {
+		await writeResult;
+	}
+	const endResult = proc.stdin.end();
+	if (endResult instanceof Promise) {
+		await endResult;
+	}
+}
+
+async function readCliOutput(proc: CliProcess): Promise<string> {
+	if (!proc.stdout || typeof proc.stdout === "number") {
+		throw new Error("CLI stdout is not available");
+	}
+	const reader = proc.stdout.getReader();
+	const decoder = new TextDecoder();
+	let output = "";
+	while (true) {
+		const { value, done } = await reader.read();
+		if (done) break;
+		output += decoder.decode(value, { stream: true });
+	}
+	output += decoder.decode();
+	return output;
+}
+
+async function pumpStderr(
+	proc: CliProcess,
+	reader: ReadableStreamDefaultReader<Uint8Array>
+): Promise<void> {
+	const decoder = new TextDecoder();
+	let buffer = "";
+	try {
+		while (true) {
+			const { value, done } = await reader.read();
+			if (done) break;
+			buffer += decoder.decode(value, { stream: true });
+			let newlineIndex = buffer.indexOf("\n");
+			while (newlineIndex !== -1) {
+				const line = buffer.slice(0, newlineIndex).trim();
+				buffer = buffer.slice(newlineIndex + 1);
+				if (line) {
+					console.error(`[mcp-cli stderr] ${line}`);
+				}
+				newlineIndex = buffer.indexOf("\n");
+			}
+		}
+	} catch (error) {
+		console.error("[mcp-cli stderr] pipe failed", error);
+	}
+
+	if (buffer.trim()) {
+		console.error(`[mcp-cli stderr] ${buffer.trim()}`);
+	}
+}
 
 function base64Url(buffer: Buffer): string {
 	return buffer
@@ -407,30 +493,30 @@ async function handleMcp(request: Request): Promise<Response> {
 	const payload = bodyText.endsWith("\n") ? bodyText : `${bodyText}\n`;
 
 	try {
-		const proc = Bun.spawn(["/bin/sh", "-lc", config.cliCommand], {
-			stdin: "pipe",
-			stdout: "pipe",
-			stderr: "pipe"
-		});
+		const proc = spawnCliProcess();
+		if (config.cliTraceStdout) {
+			console.log(`[mcp-cli stdin] ${payload.trimEnd()}`);
+		}
+		await writeCliPayload(proc, encoder.encode(payload));
+		const output = await readCliOutput(proc);
+		const exitCode = await proc.exited;
 
-		const writer = proc.stdin.getWriter();
-		await writer.write(encoder.encode(payload));
-		await writer.close();
-
-		if (proc.stderr) {
-			proc.stderr.pipeTo(
-				new WritableStream({
-					write(chunk) {
-						const message = decoder.decode(chunk).trim();
-						if (message) {
-							console.error(`[mcp-cli stderr] ${message}`);
-						}
-					}
-				})
-			);
+		if (config.cliTraceStdout && output.trim()) {
+			console.log(`[mcp-cli stdout] ${output.trimEnd()}`);
 		}
 
-		return new Response(proc.stdout, {
+		if (!output.trim() || exitCode !== 0) {
+			if (exitCode !== 0) {
+				console.error(`[mcp-cli] exited with code ${exitCode}`);
+			}
+			return new Response(JSON.stringify({ error: "mcp_cli_failed" }), {
+				status: 500,
+				headers: { "content-type": "application/json; charset=utf-8", ...corsHeaders() }
+			});
+		}
+
+		const responseBody = output.endsWith("\n") ? output : `${output}\n`;
+		return new Response(responseBody, {
 			status: 200,
 			headers: {
 				"content-type": "application/json; charset=utf-8",
@@ -440,7 +526,7 @@ async function handleMcp(request: Request): Promise<Response> {
 			}
 		});
 	} catch (error) {
-		console.error("Failed to spawn MCP CLI", error);
+		console.error("Failed to handle MCP CLI request", error);
 		return new Response(JSON.stringify({ error: "mcp_cli_failed" }), {
 			status: 500,
 			headers: { "content-type": "application/json; charset=utf-8", ...corsHeaders() }
@@ -487,3 +573,6 @@ const server = Bun.serve({
 
 console.log(`Streamable-HTTP MCP server listening on http://localhost:${server.port}`);
 console.log(`MCP CLI command: ${config.cliCommand}`);
+if (config.cliWorkingDir) {
+	console.log(`MCP CLI working dir: ${config.cliWorkingDir}`);
+}
