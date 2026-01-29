@@ -29,7 +29,8 @@ class MCPToolInputSchema implements MCPToolInputSchemaInterface {
 	 * @return object{
 	 *     type: 'object',
 	 *     properties: array<string, array<string, mixed>>|object,
-	 *     required?: string[]
+	 *     required?: string[],
+	 *     additionalProperties: bool
 	 * }
 	 */
 	public function jsonSerialize(): object {
@@ -38,6 +39,7 @@ class MCPToolInputSchema implements MCPToolInputSchemaInterface {
 		$result = [
 			'type' => 'object',
 			'properties' => $this->properties->jsonSerialize(),
+			'additionalProperties' => false,
 		];
 		
 		if(count($required)) {

@@ -11,6 +11,8 @@ class MCPToolRawInputSchema implements MCPToolInputSchemaInterface {
 	) {}
 
 	public function jsonSerialize(): object {
-		return (object) $this->schema;
+		$schema = (array) $this->schema;
+		$schema['additionalProperties'] = false;
+		return (object) $schema;
 	}
 }

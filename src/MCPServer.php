@@ -36,7 +36,8 @@ use Throwable;
  * @phpstan-type TResourceInputSchema array{
  *     type: 'object',
  *     properties: array<string, mixed>,
- *     required?: string[]
+ *     required?: string[],
+ *     additionalProperties: bool
  * }
  *
  * @phpstan-type TResource array{
@@ -122,6 +123,7 @@ class MCPServer {
 		$inputSchema = [
 			'type' => 'object',
 			'properties' => $properties,
+			'additionalProperties' => false,
 		];
 
 		if(count($required)) {
@@ -478,7 +480,7 @@ class MCPServer {
 
 	/**
 	 * @param object $params
-	 * @return array{resourceTemplates: array{uriTemplate: string, description?: string, inputSchema: array{type: 'object', properties: array<string, mixed>, required?: string[]}}[]}
+	 * @return array{resourceTemplates: array{uriTemplate: string, description?: string, inputSchema: array{type: 'object', properties: array<string, mixed>, required?: string[], additionalProperties: bool}}[]}
 	 */
 	private function listResourceTemplates(object $params): array {
 		$templates = [];
@@ -497,7 +499,12 @@ class MCPServer {
 				$properties[$name] = $property;
 			}
 			unset($template['properties']);
-			$template['inputSchema'] = ['type' => 'object', 'properties' => $properties, 'required' => $required];
+			$template['inputSchema'] = [
+				'type' => 'object',
+				'properties' => $properties,
+				'required' => $required,
+				'additionalProperties' => false,
+			];
 			$templates[] = $template;
 		}
 
