@@ -57,7 +57,7 @@ use Throwable;
  * }
  */
 class MCPServer {
-	private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-03-26'];
+	private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-03-26', '2025-11-25'];
 
 	/** @var array<string, MCPPrompt> */
 	private array $prompts = [];
