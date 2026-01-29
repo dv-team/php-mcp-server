@@ -278,17 +278,18 @@ class MCPServer {
 	}
 
 	/**
-	 * @return array{
+	 * @return object{
 	 *     protocolVersion: string,
-	 *     serverInfo: array{name: string, version: string},
-	 *     capabilities: array{
-	 *         prompts?: array{listChanged: bool},
-	 *         resources?: array{listChanged: bool},
-	 *         tools?: array{listChanged: bool}
+	 *     serverInfo: object{name: string, version: string},
+	 *     capabilities: object{
+	 *         prompts?: object{listChanged?: bool},
+	 *         resources?: object{listChanged?: bool},
+	 *         tools?: object{listChanged?: bool},
+	 *         instructions?: string
 	 *     }
 	 * }
 	 */
-	private function initialize(object $params): array {
+	private function initialize(object $params): object {
 		$protocolVersion = property_exists($params, 'protocolVersion') ? $params->protocolVersion : null;
 		if(!is_string($protocolVersion) || !in_array($protocolVersion, self::SUPPORTED_PROTOCOL_VERSIONS, true)) {
 			throw new MCPInvalidArgumentException(
@@ -299,30 +300,29 @@ class MCPServer {
 		}
 		$capabilities = [];
 
-		//'resources' => new stdClass(),
 		if(count($this->prompts)) {
-			$capabilities['prompts'] = ['listChanged' => true];
+			$capabilities['prompts'] = (object) []; // 'listChanged' => true
 		}
 
 		if(count($this->resources)) {
-			$capabilities['resources'] = ['listChanged' => true];
+			$capabilities['resources'] = (object) []; // 'listChanged' => true
 		}
 
 		if(count($this->tools)) {
-			$capabilities['tools'] = ['listChanged' => true];
+			$capabilities['tools'] = (object) []; // 'listChanged' => true
 		}
 
 		$result = [
 			'protocolVersion' => $protocolVersion,
-			'serverInfo' => ['name' => $this->name, 'version' => '1.0.0'],
-			'capabilities' => $capabilities
+			'serverInfo' => (object) ['name' => $this->name, 'version' => '1.0.0'],
+			'capabilities' => (object) $capabilities
 		];
 
 		if($this->instructions !== null) {
 			$result['instructions'] = $this->instructions;
 		}
 
-		return $result;
+		return (object) $result;
 	}
 
 	/**
