@@ -223,6 +223,28 @@ function parseBasicAuth(header: string | null): { clientId: string; clientSecret
 	};
 }
 
+function isNotificationPayload(bodyText: string): boolean {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(bodyText);
+	} catch {
+		return false;
+	}
+
+	const isNotification = (value: unknown): boolean => {
+		if (!value || typeof value !== "object") return false;
+		const record = value as Record<string, unknown>;
+		if (typeof record.method !== "string") return false;
+		return !Object.prototype.hasOwnProperty.call(record, "id");
+	};
+
+	if (Array.isArray(parsed)) {
+		return parsed.length > 0 && parsed.every(isNotification);
+	}
+
+	return isNotification(parsed);
+}
+
 function validateClient(clientId: string | null, clientSecret: string | null): boolean {
 	if (!clientId || !clientSecret) return false;
 	return clientId === config.clientId && clientSecret === config.clientSecret;
@@ -490,6 +512,7 @@ async function handleMcp(request: Request): Promise<Response> {
 		});
 	}
 
+	const notificationOnly = isNotificationPayload(bodyText);
 	const payload = bodyText.endsWith("\n") ? bodyText : `${bodyText}\n`;
 
 	try {
@@ -508,6 +531,9 @@ async function handleMcp(request: Request): Promise<Response> {
 		if (!output.trim() || exitCode !== 0) {
 			if (exitCode !== 0) {
 				console.error(`[mcp-cli] exited with code ${exitCode}`);
+			}
+			if (notificationOnly && exitCode === 0) {
+				return new Response("", { status: 204, headers: corsHeaders() });
 			}
 			return new Response(JSON.stringify({ error: "mcp_cli_failed" }), {
 				status: 500,
