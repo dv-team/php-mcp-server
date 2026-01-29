@@ -11,7 +11,7 @@ class MCPToolInputSchema implements MCPToolInputSchemaInterface {
 		public readonly MCPToolProperties $properties,
 		public readonly array $required = [],
 	) {}
-	
+
 	/**
 	 * @return string[]
 	 */
@@ -24,28 +24,35 @@ class MCPToolInputSchema implements MCPToolInputSchemaInterface {
 		}
 		return $requiredProperties;
 	}
-	
+
 	/**
 	 * @return object{
 	 *     type: 'object',
-	 *     properties: array<string, array<string, mixed>>|object,
+	 *     properties?: array<string, array<string, mixed>>|object,
 	 *     required?: string[],
 	 *     additionalProperties: bool
 	 * }
 	 */
 	public function jsonSerialize(): object {
 		$required = array_values(array_unique(array_merge($this->required, $this->getRequired())));
-		
+
+		$properties = $this->properties->jsonSerialize();
+
 		$result = [
 			'type' => 'object',
-			'properties' => $this->properties->jsonSerialize(),
+			'properties' => $properties,
 			'additionalProperties' => false,
 		];
-		
+
+		if(empty((array) $properties)) {
+			unset($result['properties']);
+			$result['additionalProperties'] = true;
+		}
+
 		if(count($required)) {
 			$result['required'] = $required;
 		}
-		
+
 		return (object) $result;
 	}
 }

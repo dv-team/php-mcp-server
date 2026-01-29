@@ -20,22 +20,27 @@ class MCPTool implements JsonSerializable {
 		public $handler,
 		public readonly ?object $returnSchema = null,
 	) {}
-	
+
 	/**
 	 * @return object{
 	 *     name: string,
 	 *     description: string,
-	 *     inputSchema: object,
+	 *     inputSchema?: object,
 	 *     returnSchema?: object
 	 * }
 	 */
 	public function jsonSerialize(): object {
+		$inputSchema = $this->arguments->jsonSerialize();
+
 		$result = [
 			'name' => $this->name,
 			'description' => $this->description,
-			'inputSchema' => $this->arguments->jsonSerialize(),
 		];
 
+		if(count((array) ($inputSchema->properties ?? []))) {
+			$result['inputSchema'] = $inputSchema;
+		}
+		
 		if($this->returnSchema !== null) {
 			$result['returnSchema'] = $this->returnSchema;
 		}

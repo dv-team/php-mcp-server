@@ -35,7 +35,7 @@ use Throwable;
  *
  * @phpstan-type TResourceInputSchema array{
  *     type: 'object',
- *     properties: array<string, mixed>,
+ *     properties?: object,
  *     required?: string[],
  *     additionalProperties: bool
  * }
@@ -44,7 +44,7 @@ use Throwable;
  *     uri: string,
  *     name: string,
  *     description: null|string,
- *     handler: null|(callable(object $args): (null|string)),
+ *     handler: null|callable(object $args): MCPResource[],
  *     mimeType: null|string,
  *     inputSchema: TResourceInputSchema
  * }
@@ -107,7 +107,7 @@ class MCPServer {
 	 * @param string $uri
 	 * @param string $name
 	 * @param null|string $description
-	 * @param null|(callable(object $args): (null|string)) $handler
+	 * @param null|callable(object $args): MCPResource[] $handler
 	 * @param array<string, mixed> $properties
 	 * @param string[] $required
 	 */
@@ -118,13 +118,18 @@ class MCPServer {
 		$handler = null,
 		?string $mimeType = null,
 		array $properties = [],
-		array $required = []
+		array $required = [],
 	): void {
 		$inputSchema = [
 			'type' => 'object',
-			'properties' => $properties,
+			'properties' => (object) $properties,
 			'additionalProperties' => false,
 		];
+
+		if(empty($properties)) {
+			unset($inputSchema['properties']);
+			$inputSchema['additionalProperties'] = true;
+		}
 
 		if(count($required)) {
 			$inputSchema['required'] = array_values(array_unique($required));
@@ -159,7 +164,7 @@ class MCPServer {
 			'uriTemplate' => $uriTemplate,
 			'description' => $description,
 			'properties' => $properties,
-			'handler' => $handler
+			'handler' => $handler,
 		];
 	}
 
@@ -181,7 +186,7 @@ class MCPServer {
 		MCPToolInputSchemaInterface $inputSchema,
 		bool $isDangerous,
 		$handler,
-		?object $returnSchema = null
+		?object $returnSchema = null,
 	): void {
 		$this->tools[$name] = new MCPTool(
 			name: $name,
@@ -227,6 +232,7 @@ class MCPServer {
 	public function run(string $input): void {
 		if(trim($input) === '') {
 			$this->responseHandler->replyError(0, 'Empty input body', 100);
+
 			return;
 		}
 
@@ -234,8 +240,9 @@ class MCPServer {
 			/** @var object{method: string, id: int|string, params?: object}&stdClass $body */
 			$body = json_decode($input, associative: false, flags: JSON_THROW_ON_ERROR);
 			$body->params ??= new stdClass();
-		} catch (JsonException) {
+		} catch(JsonException) {
 			$this->responseHandler->replyError(0, 'Failed to parse request body', 100);
+
 			return;
 		}
 
@@ -246,38 +253,52 @@ class MCPServer {
 				throw new MCPInvalidArgumentException('Missing method', 100);
 			}
 
+			$result = [];
+			$extraResult = [];
+
 			if($method === 'initialize') {
 				$params = property_exists($body, 'params') ? $body->params : null;
 				if(!is_object($params)) {
 					$params = (object) [];
 				}
-				$result = $this->initialize($params);
+				$result[] = $this->initialize($params);
 			} elseif($method === 'notifications/initialized') {
-				http_response_code(202);
-				$result = null;
+				if(PHP_SAPI !== 'cli') {
+					http_response_code(202);
+				}
 			} elseif($method === 'prompts/list') {
-				$result = $this->listPrompts($body->params);
+				$result[] = $this->listPrompts($body->params);
+				$extraResult[] = $this->finalize();
 			} elseif($method === 'prompts/get') {
-				$result = $this->getPrompt($body->params);
+				$result[] = $this->getPrompt($body->params);
+				$extraResult[] = $this->finalize();
 			} elseif($method === 'resources/list') {
-				$result = $this->listResources($body->params);
+				$result[] = $this->listResources($body->params);
+				$extraResult[] = $this->finalize();
 			} elseif($method === 'resources/read') {
-				$result = $this->readResource($body->params);
+				$result[] = $this->readResource($body->params);
+				$extraResult[] = $this->finalize();
 			} elseif($method === 'resources/templates/list') {
-				$result = $this->listResourceTemplates($body->params);
+				$result[] = $this->listResourceTemplates($body->params);
+				$extraResult[] = $this->finalize();
 			} elseif($method === 'tools/list') {
-				$result = $this->listTools($body->params);
+				$result[] = $this->listTools($body->params);
+				$extraResult[] = $this->finalize();
 			} elseif($method === 'tools/call') {
-				$result = $this->callTool($body->params)->jsonSerialize();
+				$result[] = $this->callTool($body->params)->jsonSerialize();
+				$extraResult[] = $this->finalize();
 			} elseif(str_starts_with($method, 'notifications/')) {
 				// Do nothing, the server does not handle notifications
-				$result = null;
 			} else {
 				throw new MCPInvalidArgumentException('Invalid method', 100);
 			}
 
-			if($result !== null) {
-				$this->responseHandler->reply($body->id, $result);
+			foreach($result as $item) {
+				$this->responseHandler->reply($body->id, $item);
+			}
+
+			foreach($extraResult as $item) {
+				$this->responseHandler->replyRaw($item);
 			}
 		} catch(MCPException $e) {
 			$this->responseHandler->replyError($body->id, $e->getMessage(), $e->getCode() ?: 500, $e->getData());
@@ -310,21 +331,21 @@ class MCPServer {
 		$capabilities = [];
 
 		if(count($this->prompts)) {
-			$capabilities['prompts'] = (object) []; // 'listChanged' => true
+			$capabilities['prompts'] = (object) ['list' => (object) [], 'get' => (object) []]; // 'listChanged' => true
 		}
 
 		if(count($this->resources)) {
-			$capabilities['resources'] = (object) []; // 'listChanged' => true
+			$capabilities['resources'] = (object) ['list' => (object) [], 'read' => (object) []]; // 'listChanged' => true
 		}
 
 		if(count($this->tools)) {
-			$capabilities['tools'] = (object) []; // 'listChanged' => true
+			$capabilities['tools'] = (object) ['list' => (object) [], 'call' => (object) []]; // 'listChanged' => true
 		}
 
 		$result = [
 			'protocolVersion' => $protocolVersion,
 			'serverInfo' => (object) ['name' => $this->name, 'version' => '1.0.0'],
-			'capabilities' => (object) $capabilities
+			'capabilities' => (object) $capabilities,
 		];
 
 		if($this->instructions !== null) {
@@ -355,9 +376,10 @@ class MCPServer {
 			$prompts[] = [
 				'name' => $name,
 				'description' => $prompt->description,
-				'arguments' => $arguments
+				'arguments' => $arguments,
 			];
 		}
+
 		return ['prompts' => $prompts];
 	}
 
@@ -376,6 +398,7 @@ class MCPServer {
 		}
 		$prompt = $this->prompts[$params->name];
 		$handler = $prompt->handler;
+
 		return $handler($params);
 	}
 
@@ -399,7 +422,7 @@ class MCPServer {
 				$entry['mimeType'] = $resource['mimeType'];
 			}
 
-			if(count($resource['inputSchema']['properties']) || array_key_exists('required', $resource['inputSchema'])) {
+			if(count((array) ($resource['inputSchema']['properties'] ?? [])) || array_key_exists('required', $resource['inputSchema'])) {
 				$entry['inputSchema'] = $resource['inputSchema'];
 			}
 
@@ -471,6 +494,7 @@ class MCPServer {
 					$resource->uri ??= $params->uri;
 					$result[] = $resource;
 				}
+
 				return ['contents' => $result];
 			}
 		}
@@ -480,7 +504,7 @@ class MCPServer {
 
 	/**
 	 * @param object $params
-	 * @return array{resourceTemplates: array{uriTemplate: string, description?: string, inputSchema: array{type: 'object', properties: array<string, mixed>, required?: string[], additionalProperties: bool}}[]}
+	 * @return array{resourceTemplates: array{uriTemplate: string, description?: string, inputSchema?: array{type: 'object', properties?: array<string, mixed>, required?: string[], additionalProperties: bool}}[]}
 	 */
 	private function listResourceTemplates(object $params): array {
 		$templates = [];
@@ -505,6 +529,12 @@ class MCPServer {
 				'required' => $required,
 				'additionalProperties' => false,
 			];
+
+			if(empty($properties)) {
+				unset($template['inputSchema']['properties']);
+				$template['inputSchema']['additionalProperties'] = true;
+			}
+
 			$templates[] = $template;
 		}
 
@@ -513,13 +543,14 @@ class MCPServer {
 
 	/**
 	 * @param object $params
-	 * @return object{tools: array<object{name: string, description: string, inputSchema: object, returnSchema?: object}>}
+	 * @return object{tools: array<object{name: string, description: string, inputSchema?: object, returnSchema?: object}>}
 	 */
 	private function listTools(object $params): object {
 		$tools = [];
 		foreach($this->tools as $tool) {
 			$tools[] = $tool->jsonSerialize();
 		}
+
 		return (object) ['tools' => $tools];
 	}
 
@@ -542,6 +573,20 @@ class MCPServer {
 		}
 		$tool = $this->tools[$params->name];
 		$handler = $tool->handler;
+
 		return $handler($params->arguments);
+	}
+
+	private function finalize(): object {
+		return (object) [
+			'jsonrpc' => '2.0',
+			'method' => '$/progress',
+			'params' => [
+				'token' => 0,
+				'value' => [
+					'kind' => 'end',
+				],
+			],
+		];
 	}
 }

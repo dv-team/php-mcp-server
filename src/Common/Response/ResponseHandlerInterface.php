@@ -9,5 +9,10 @@ interface ResponseHandlerInterface {
 	 * @return void
 	 */
 	public function reply(string|int $id, object|array $result): void;
+	/**
+	 * @param object|mixed[] $result
+	 * @return void
+	 */
+	public function replyRaw(object|array $result): void;
 	public function replyError(string|int $id, string $message, int $code, mixed $data = null): void;
 }

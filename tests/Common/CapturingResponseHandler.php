@@ -21,4 +21,7 @@ class CapturingResponseHandler implements ResponseHandlerInterface {
 			$this->error['data'] = $data;
 		}
 	}
+
+	public function replyRaw(object|array $result): void {
+	}
 }
