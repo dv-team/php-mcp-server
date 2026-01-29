@@ -9,7 +9,6 @@ use McpSrv\Types\Tools\MCPToolProperty;
  * @phpstan-type TEnumStruct object{
  *     type: 'array',
  *     description: string,
- *     required: bool,
  *     items: TItem,
  *     minItems?: int,
  *     maxItems?: int,
@@ -85,7 +84,6 @@ readonly class MCPToolEnum implements MCPToolProperty {
 		$result = [
 			'type' => 'array',
 			'description' => $this->description,
-			'required' => $this->required,
 			'items' => [
 				'enum' => $this->options,
 				'type' => $type,

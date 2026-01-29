@@ -9,7 +9,6 @@ use McpSrv\Types\Tools\MCPToolProperty;
  * @phpstan-type TObjectStruct object{
  *     type: 'object',
  *     description: string,
- *     required: bool,
  *     properties: object,
  *     minProperties?: int,
  *     maxProperties?: int,
@@ -55,7 +54,6 @@ class MCPToolObject implements MCPToolProperty {
 			'type' => 'object',
 			'description' => $this->description,
 			'properties' => $this->properties->jsonSerialize(),
-			'required' => $this->required,
 		];
 		
 		if($this->minProperties !== null) {

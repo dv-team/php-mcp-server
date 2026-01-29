@@ -38,7 +38,9 @@ readonly class MCPToolRawProperty implements MCPToolProperty {
 	 */
 	public function jsonSerialize(): object {
 		$schema = (array) $this->schema;
-		$schema['required'] = $schema['required'] ?? $this->required;
+		if(array_key_exists('required', $schema) && !is_array($schema['required'])) {
+			unset($schema['required']);
+		}
 
 		return (object) $schema;
 	}

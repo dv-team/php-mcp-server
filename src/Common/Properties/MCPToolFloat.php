@@ -8,7 +8,6 @@ use McpSrv\Types\Tools\MCPToolProperty;
  * @phpstan-type TFloatStruct object{
  *     type: 'number',
  *     description: string,
- *     required: bool,
  *     minimum?: float,
  *     maximum?: float,
  *     multipleOf?: float,
@@ -41,7 +40,6 @@ class MCPToolFloat implements MCPToolProperty {
 		$result = [
 			'type' => 'number',
 			'description' => $this->description,
-			'required' => $this->required,
 		];
 		
 		if($this->minimum !== null) {

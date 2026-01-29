@@ -8,7 +8,6 @@ use McpSrv\Types\Tools\MCPToolProperty;
  * @phpstan-type TStringStruct object{
  *     type: 'string',
  *     description: string,
- *     required: bool,
  *     minLength?: int,
  *     pattern?: string,
  *     default?: string
@@ -39,7 +38,6 @@ class MCPToolString implements MCPToolProperty {
 		$result = [
 			'type' => 'string',
 			'description' => $this->description,
-			'required' => $this->required,
 		];
 		
 		if($this->minLength !== null) {

@@ -8,7 +8,6 @@ use McpSrv\Types\Tools\MCPToolProperty;
  * @phpstan-type TBooleanStruct object{
  *     type: 'boolean',
  *     description: string,
- *     required: bool,
  *     default?: bool
  * }
  */
@@ -35,7 +34,6 @@ readonly class MCPToolBoolean implements MCPToolProperty {
 		$result = [
 			'type' => 'boolean',
 			'description' => $this->description,
-			'required' => $this->required,
 		];
 		
 		if($this->default !== null) {

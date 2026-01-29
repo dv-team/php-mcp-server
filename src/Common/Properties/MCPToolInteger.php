@@ -8,7 +8,6 @@ use McpSrv\Types\Tools\MCPToolProperty;
  * @phpstan-type TIntegerStruct object{
  *     type: 'integer',
  *     description: string,
- *     required: bool,
  *     minimum?: int,
  *     maximum?: int,
  *     multipleOf?: int,
@@ -41,7 +40,6 @@ class MCPToolInteger implements MCPToolProperty {
 		$result = [
 			'type' => 'integer',
 			'description' => $this->description,
-			'required' => $this->required,
 		];
 		
 		if($this->minimum !== null) {
