@@ -17,6 +17,7 @@ use McpSrv\Types\Tools\MCPToolInputSchemaInterface;
 use McpSrv\Types\Tools\MCPToolResult;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
+use stdClass;
 use Throwable;
 
 /**
@@ -61,7 +62,7 @@ class MCPServer {
 
 	/** @var array<string, MCPPrompt> */
 	private array $prompts = [];
-	
+
 	/** @var array<string, MCPTool> */
 	private array $tools = [];
 
@@ -80,7 +81,7 @@ class MCPServer {
 		private readonly ?string $instructions = null,
 		private readonly ?LoggerInterface $logger = null,
 	) {}
-	
+
 	/**
 	 * @param string $name
 	 * @param string $description
@@ -221,8 +222,9 @@ class MCPServer {
 		}
 
 		try {
-			/** @var object{method: string, id: int|string, params: object} $body */
+			/** @var object{method: string, id: int|string, params?: object}&stdClass $body */
 			$body = json_decode($input, associative: false, flags: JSON_THROW_ON_ERROR);
+			$body->params ??= new stdClass();
 		} catch (JsonException) {
 			$this->responseHandler->replyError(0, 'Failed to parse request body', 100);
 			return;
@@ -272,8 +274,8 @@ class MCPServer {
 			}
 		} catch(MCPException $e) {
 			$this->responseHandler->replyError($body->id, $e->getMessage(), $e->getCode() ?: 500, $e->getData());
-		} catch(Throwable) {
-			$this->responseHandler->replyError($body->id, 'Internal server error', 500);
+		} catch(Throwable $e) {
+			$this->responseHandler->replyError($body->id, "Internal server error: {$e->getMessage()}", 500);
 		}
 	}
 
