@@ -43,6 +43,7 @@ use Throwable;
  *     uri: string,
  *     name: string,
  *     description: null|string,
+ *     handler: null|(callable(object $args): (null|string)),
  *     mimeType: null|string,
  *     inputSchema: TResourceInputSchema
  * }
@@ -58,7 +59,7 @@ use Throwable;
  * }
  */
 class MCPServer {
-	private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-03-26', '2025-11-25'];
+	private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-03-26', '2025-06-18', '2025-11-25'];
 
 	/** @var array<string, MCPPrompt> */
 	private array $prompts = [];
@@ -105,6 +106,7 @@ class MCPServer {
 	 * @param string $uri
 	 * @param string $name
 	 * @param null|string $description
+	 * @param null|(callable(object $args): (null|string)) $handler
 	 * @param array<string, mixed> $properties
 	 * @param string[] $required
 	 */
@@ -112,6 +114,7 @@ class MCPServer {
 		string $uri,
 		string $name,
 		?string $description,
+		$handler = null,
 		?string $mimeType = null,
 		array $properties = [],
 		array $required = []
@@ -128,6 +131,7 @@ class MCPServer {
 		$this->resources[$uri] = [
 			'uri' => $uri,
 			'name' => $name,
+			'handler' => $handler,
 			'mimeType' => $mimeType,
 			'description' => $description,
 			'inputSchema' => $inputSchema,
@@ -197,22 +201,25 @@ class MCPServer {
 		if(!is_resource($resource)) {
 			throw new RuntimeException('Failed to open stdin');
 		}
-		while(!feof($resource)) {
-			/** @var string|false $line */
-			$line = fgets($resource, null);
-			if($line === false) {
-				continue;
+		try {
+			while(!feof($resource)) {
+				/** @var string|false $line */
+				$line = fgets($resource, null);
+				if($line === false) {
+					continue;
+				}
+
+				$this->logger?->debug("IN", (array) json_decode(json: $line, associative: false, flags: JSON_THROW_ON_ERROR));
+
+				$this->run($line);
+
+				if(!$loop) {
+					break;
+				}
 			}
-
-			$this->logger?->debug("IN", (array) json_decode(json: $line, associative: false, flags: JSON_THROW_ON_ERROR));
-
-			$this->run($line);
-
-			if(!$loop) {
-				break;
-			}
+		} finally {
+			$this->logger?->debug('SYSTEM: Server stopped');
 		}
-		$this->logger?->debug('SYSTEM: Server stopped');
 	}
 
 	public function run(string $input): void {
@@ -236,8 +243,6 @@ class MCPServer {
 			if($method === null) {
 				throw new MCPInvalidArgumentException('Missing method', 100);
 			}
-
-			$this->logger?->info("Request {$method}", ['body' => $body]);
 
 			if($method === 'initialize') {
 				$params = property_exists($body, 'params') ? $body->params : null;
@@ -415,10 +420,14 @@ class MCPServer {
 		$arguments = property_exists($params, 'arguments') && is_object($params->arguments) ? $params->arguments : new \stdClass();
 
 		if(array_key_exists($params->uri, $this->resources)) {
-			if($this->resourceHandler === null) {
-				throw new MCPGeneralException('No resource handler registered', 500);
+			if($this->resources[$params->uri]['handler'] === null) {
+				if($this->resourceHandler === null) {
+					throw new MCPGeneralException('No resource handler registered', 500);
+				}
+				$handler = $this->resourceHandler;
+			} else {
+				$handler = $this->resources[$params->uri]['handler'];
 			}
-			$handler = $this->resourceHandler;
 
 			/** @var iterable<MCPResource> $resources */
 			$resources = $handler((object) [
