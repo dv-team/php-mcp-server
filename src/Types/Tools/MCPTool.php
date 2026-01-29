@@ -35,12 +35,9 @@ class MCPTool implements JsonSerializable {
 		$result = [
 			'name' => $this->name,
 			'description' => $this->description,
+			'inputSchema' => $inputSchema,
 		];
 
-		if(count((array) ($inputSchema->properties ?? []))) {
-			$result['inputSchema'] = $inputSchema;
-		}
-		
 		if($this->returnSchema !== null) {
 			$result['returnSchema'] = $this->returnSchema;
 		}

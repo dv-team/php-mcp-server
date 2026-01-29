@@ -44,11 +44,6 @@ class MCPToolInputSchema implements MCPToolInputSchemaInterface {
 			'additionalProperties' => false,
 		];
 
-		if(empty((array) $properties)) {
-			unset($result['properties']);
-			$result['additionalProperties'] = true;
-		}
-
 		if(count($required)) {
 			$result['required'] = $required;
 		}
