@@ -30,7 +30,7 @@
         }
     },
     "scripts": {
-        "phpstan": "phpstan analyse -c phpstan.neon --memory-limit=2G --error-format=raw",
+        "phpstan": "phpstan analyse -c phpstan.neon --memory-limit=2G --no-progress",
         "test": "phpunit"
     }
 }
