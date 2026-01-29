@@ -229,32 +229,38 @@ class MCPServer {
 		}
 
 		try {
-			$this->logger?->info("Request {$body->method}", ['body' => $body]);
+			$method = $body->method ?? null;
 
-			if($body->method === 'initialize') {
+			if($method === null) {
+				throw new MCPInvalidArgumentException('Missing method', 100);
+			}
+
+			$this->logger?->info("Request {$method}", ['body' => $body]);
+
+			if($method === 'initialize') {
 				$params = property_exists($body, 'params') ? $body->params : null;
 				if(!is_object($params)) {
 					$params = (object) [];
 				}
 				$result = $this->initialize($params);
-			} elseif($body->method === 'notifications/initialized') {
+			} elseif($method === 'notifications/initialized') {
 				http_response_code(202);
 				$result = null;
-			} elseif($body->method === 'prompts/list') {
+			} elseif($method === 'prompts/list') {
 				$result = $this->listPrompts($body->params);
-			} elseif($body->method === 'prompts/get') {
+			} elseif($method === 'prompts/get') {
 				$result = $this->getPrompt($body->params);
-			} elseif($body->method === 'resources/list') {
+			} elseif($method === 'resources/list') {
 				$result = $this->listResources($body->params);
-			} elseif($body->method === 'resources/read') {
+			} elseif($method === 'resources/read') {
 				$result = $this->readResource($body->params);
-			} elseif($body->method === 'resources/templates/list') {
+			} elseif($method === 'resources/templates/list') {
 				$result = $this->listResourceTemplates($body->params);
-			} elseif($body->method === 'tools/list') {
+			} elseif($method === 'tools/list') {
 				$result = $this->listTools($body->params);
-			} elseif($body->method === 'tools/call') {
+			} elseif($method === 'tools/call') {
 				$result = $this->callTool($body->params)->jsonSerialize();
-			} elseif(str_starts_with($body->method, 'notifications/')) {
+			} elseif(str_starts_with($method, 'notifications/')) {
 				// Do nothing, the server does not handle notifications
 				$result = null;
 			} else {
