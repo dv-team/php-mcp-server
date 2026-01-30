@@ -42,15 +42,18 @@ class AttributeToolRegistrar {
 				handler: static function(object $arguments) use ($toolCollection, $method): MCPToolResult {
 					return self::invokeTool($toolCollection, $method, $arguments);
 				},
-				returnSchema: (object) $toolAttribute->returnSchema
+				returnSchema: $toolAttribute->returnSchema === null ? null : (object) $toolAttribute->returnSchema
 			);
 		}
 	}
 
 	/**
-	 * @param array{}|object $schema
+	 * @param array{}|object|null $schema
 	 */
-	private static function buildInputSchema(array|object $schema, ReflectionMethod $method): MCPToolInputSchema {
+	private static function buildInputSchema(array|object|null $schema, ReflectionMethod $method): MCPToolInputSchema {
+		if($schema === null) {
+			$schema = (object) ['properties' => []];
+		}
 		$schema = (object) $schema;
 		$properties = $schema->properties ?? [];
 		if(!is_array($properties)) {

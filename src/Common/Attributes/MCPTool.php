@@ -10,14 +10,14 @@ use Attribute;
 #[Attribute(Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION)]
 readonly class MCPTool {
 	/**
-	 * @param TJsonSchema $parametersSchema
-	 * @param TJsonSchema $returnSchema
+	 * @param TJsonSchema|null $parametersSchema
+	 * @param TJsonSchema|null $returnSchema
 	 */
 	public function __construct(
 		public string $name,
 		public string $description,
-		public array|object $parametersSchema,
-		public array|object $returnSchema,
+		public array|object|null $parametersSchema = null,
+		public array|object|null $returnSchema = null,
 		public bool $isDangerous = false,
 	) {}
 }
