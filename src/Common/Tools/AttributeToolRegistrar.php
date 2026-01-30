@@ -42,15 +42,16 @@ class AttributeToolRegistrar {
 				handler: static function(object $arguments) use ($toolCollection, $method): MCPToolResult {
 					return self::invokeTool($toolCollection, $method, $arguments);
 				},
-				returnSchema: $toolAttribute->returnSchema
+				returnSchema: (object) $toolAttribute->returnSchema
 			);
 		}
 	}
 
 	/**
-	 * @param object $schema
+	 * @param array{}|object $schema
 	 */
-	private static function buildInputSchema(object $schema, ReflectionMethod $method): MCPToolInputSchema {
+	private static function buildInputSchema(array|object $schema, ReflectionMethod $method): MCPToolInputSchema {
+		$schema = (object) $schema;
 		$properties = $schema->properties ?? [];
 		if(!is_array($properties)) {
 			throw new MCPInvalidArgumentException('parametersSchema must contain a properties map');

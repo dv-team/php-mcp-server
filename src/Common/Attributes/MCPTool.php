@@ -5,7 +5,7 @@ namespace McpSrv\Common\Attributes;
 use Attribute;
 
 /**
- * @phpstan-type TJsonSchema object{}
+ * @phpstan-type TJsonSchema array{}|object{}
  */
 #[Attribute(Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION)]
 readonly class MCPTool {
@@ -16,7 +16,7 @@ readonly class MCPTool {
 	public function __construct(
 		public string $name,
 		public string $description,
-		public object $parametersSchema,
-		public object $returnSchema,
+		public array|object $parametersSchema,
+		public array|object $returnSchema,
 	) {}
 }
