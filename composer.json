@@ -17,7 +17,8 @@
         "roave/security-advisories": "dev-latest",
         "phpstan/phpstan": ">= 0.1",
         "phpunit/phpunit": "^10.5",
-        "spatie/yaml-front-matter": "^2.1"
+        "spatie/yaml-front-matter": "^2.1",
+        "justinrainbow/json-schema": "^6.6"
     },
     "autoload": {
         "psr-4": {

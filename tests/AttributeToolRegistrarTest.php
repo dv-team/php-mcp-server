@@ -7,6 +7,9 @@ namespace McpSrv;
 use McpSrv\Common\AttributeToolRegistrarFixture;
 use McpSrv\Common\CapturingResponseHandler;
 use McpSrv\Common\Tools\AttributeToolRegistrar;
+use JsonSchema\Constraints\Factory;
+use JsonSchema\SchemaStorage;
+use JsonSchema\Validator;
 use PHPUnit\Framework\TestCase;
 
 class AttributeToolRegistrarTest extends TestCase {
@@ -33,6 +36,7 @@ class AttributeToolRegistrarTest extends TestCase {
 
 		$toolsByName = [];
 		foreach($result->tools as $tool) {
+			$this->assertToolSchemaIsValid($tool);
 			$toolsByName[$tool->name] = $tool;
 		}
 
@@ -67,6 +71,46 @@ class AttributeToolRegistrarTest extends TestCase {
 		$this->assertSame('Message', $echoSchema->properties->message->description ?? null);
 		$echoRequired = $echoSchema->required ?? [];
 		$this->assertContains('message', $echoRequired);
+	}
+
+	private function assertToolSchemaIsValid(object $tool): void {
+		$schemaPath = realpath(__DIR__ . '/../schema/2025-11-25/schema.json');
+		if($schemaPath === false) {
+			self::fail('MCP schema file not found.');
+		}
+
+		$schema = json_decode((string) file_get_contents($schemaPath), false, 512, JSON_THROW_ON_ERROR);
+		if(!is_object($schema)) {
+			self::fail('MCP schema must decode to an object.');
+		}
+		$schemaUri = 'file://' . $schemaPath;
+
+		$schemaStorage = new SchemaStorage();
+		$schemaStorage->addSchema($schemaUri, $schema);
+		$validator = new Validator(new Factory($schemaStorage));
+
+		$validator->validate($tool, (object) ['$ref' => $schemaUri . '#/$defs/Tool']);
+
+		if($validator->isValid()) {
+			return;
+		}
+
+		$messages = [];
+		foreach($validator->getErrors() as $error) {
+			if(!is_array($error)) {
+				continue;
+			}
+			$property = '';
+			if(array_key_exists('property', $error) && is_string($error['property'])) {
+				$property = $error['property'];
+			}
+			$message = '';
+			if(array_key_exists('message', $error) && is_string($error['message'])) {
+				$message = $error['message'];
+			}
+			$messages[] = sprintf('%s: %s', $property, $message);
+		}
+		self::fail("Schema validation failed:\n" . implode("\n", $messages));
 	}
 
 	public function testInvokeToolHandlesDefaultsAndMissingArgs(): void {
