@@ -41,7 +41,7 @@ class MCPResourceTest extends TestCase {
 		$result = $handler->reply['result'];
 		$this->assertCount(1, $result['resources']);
 
-		/** @var array{name: string, uri: string, inputSchema: array{required?: array<int, string>, properties: array<string, mixed>}} $resource */
+		/** @var array{name: string, uri: string, inputSchema: array{required?: array<int, string>, properties: object}} $resource */
 		$resource = $result['resources'][0];
 		$this->assertSame('Example file', $resource['name']);
 		$this->assertSame('file://example.txt', $resource['uri']);
@@ -50,7 +50,7 @@ class MCPResourceTest extends TestCase {
 		$inputSchema = $resource['inputSchema'];
 		$required = $inputSchema['required'] ?? [];
 		$this->assertSame(['path'], $required);
-		$this->assertArrayHasKey('path', $inputSchema['properties']);
+		$this->assertObjectHasProperty('path', $inputSchema['properties']);
 	}
 
 	public function testListResourceTemplatesIncludesSchema(): void {

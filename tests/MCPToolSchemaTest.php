@@ -70,7 +70,7 @@ class MCPToolSchemaTest extends TestCase {
 		}
 		
 		$this->assertSame(['a'], $serialized['default']);
-		$this->assertTrue($serialized['required']);
+		$this->assertArrayNotHasKey('required', $serialized);
 	}
 	
 	public function testEnumRejectsMixedTypes(): void {

@@ -5,7 +5,7 @@ namespace McpSrv\Common\Attributes;
 use Attribute;
 
 /**
- * @phpstan-type TJsonSchema array{}|object{}
+ * @phpstan-type TJsonSchema array<string, mixed>|object{}
  */
 #[Attribute(Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION)]
 readonly class MCPTool {

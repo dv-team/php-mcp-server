@@ -35,7 +35,7 @@ use Throwable;
  *
  * @phpstan-type TResourceInputSchema array{
  *     type: 'object',
- *     properties?: object,
+ *     properties?: array<string, mixed>|object,
  *     required?: string[],
  *     additionalProperties: bool
  * }

@@ -89,7 +89,7 @@ readonly class MCPToolEnum implements MCPToolProperty {
 				'type' => $type,
 			],
 		];
-		
+
 		if($this->minItems !== null) {
 			$result['minItems'] = $this->minItems;
 		}
