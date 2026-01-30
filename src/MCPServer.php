@@ -60,7 +60,7 @@ use Throwable;
  * }
  */
 class MCPServer {
-	private const SUPPORTED_PROTOCOL_VERSIONS = ['2025-03-26', '2025-06-18', '2025-11-25'];
+	private const SUPPORTED_PROTOCOL_VERSIONS = [/*'2025-03-26', */'2025-06-18', '2025-11-25'];
 
 	/** @var array<string, MCPPrompt> */
 	private array $prompts = [];
@@ -298,7 +298,7 @@ class MCPServer {
 			}
 
 			foreach($extraResult as $item) {
-				$this->responseHandler->replyRaw($item);
+				#$this->responseHandler->replyRaw($item);
 			}
 		} catch(MCPException $e) {
 			$this->responseHandler->replyError($body->id, $e->getMessage(), $e->getCode() ?: 500, $e->getData());
