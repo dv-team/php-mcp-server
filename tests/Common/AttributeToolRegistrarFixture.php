@@ -16,8 +16,9 @@ class AttributeToolRegistrarFixture {
 	#[MCPToolAttribute(
 		name: 'sum',
 		description: 'Sum numbers',
-		parametersSchema: (object) ['properties' => []],
-		returnSchema: (object) []
+		parametersSchema: ['properties' => []],
+		returnSchema: [],
+		isDangerous: true
 	)]
 	public function sum(
 		#[MCPDescription('First number')] int $a,
@@ -29,13 +30,13 @@ class AttributeToolRegistrarFixture {
 	#[MCPToolAttribute(
 		name: 'echo',
 		description: 'Echo text',
-		parametersSchema: (object) [
+		parametersSchema: [
 			'properties' => [
 				'message' => ['type' => 'string'],
 			],
 			'required' => ['message'],
 		],
-		returnSchema: (object) []
+		returnSchema: []
 	)]
 	public function echoMessage(
 		#[MCPDescription('Message')] string $message = 'default',

@@ -18,5 +18,6 @@ readonly class MCPTool {
 		public string $description,
 		public array|object $parametersSchema,
 		public array|object $returnSchema,
+		public bool $isDangerous = false,
 	) {}
 }

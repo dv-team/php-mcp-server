@@ -27,7 +27,7 @@ class AttributeToolRegistrarTest extends TestCase {
 		$this->assertNotNull($handler->reply);
 		$this->assertSame(31, $handler->reply['id']);
 		$this->assertIsObject($handler->reply['result']);
-		/** @var object{tools: list<object{name: string, description: string, inputSchema: object}>} $result */
+		/** @var object{tools: list<object{name: string, description: string, isDangerous: bool, inputSchema: object}>} $result */
 		$result = $handler->reply['result'];
 		$this->assertCount(2, $result->tools);
 
@@ -39,6 +39,7 @@ class AttributeToolRegistrarTest extends TestCase {
 		$this->assertArrayHasKey('sum', $toolsByName);
 		$sum = $toolsByName['sum'];
 		$this->assertSame('Sum numbers', $sum->description);
+		$this->assertTrue($sum->isDangerous);
 
 		/** @var object{type: string, properties: object{a: object, b: object}, required?: string[]} $sumSchema */
 		$sumSchema = $sum->inputSchema;
@@ -57,6 +58,7 @@ class AttributeToolRegistrarTest extends TestCase {
 
 		$this->assertArrayHasKey('echo', $toolsByName);
 		$echo = $toolsByName['echo'];
+		$this->assertFalse($echo->isDangerous);
 
 		/** @var object{type: string, properties: object{message: object}, required?: string[]} $echoSchema */
 		$echoSchema = $echo->inputSchema;

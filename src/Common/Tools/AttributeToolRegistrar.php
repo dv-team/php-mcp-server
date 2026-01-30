@@ -38,7 +38,7 @@ class AttributeToolRegistrar {
 				name: $toolAttribute->name,
 				description: $toolAttribute->description,
 				inputSchema: $inputSchema,
-				isDangerous: $isDangerous,
+				isDangerous: $isDangerous || $toolAttribute->isDangerous,
 				handler: static function(object $arguments) use ($toolCollection, $method): MCPToolResult {
 					return self::invokeTool($toolCollection, $method, $arguments);
 				},

@@ -25,6 +25,7 @@ class MCPTool implements JsonSerializable {
 	 * @return object{
 	 *     name: string,
 	 *     description: string,
+	 *     isDangerous: bool,
 	 *     inputSchema?: object,
 	 *     returnSchema?: object
 	 * }
@@ -35,6 +36,7 @@ class MCPTool implements JsonSerializable {
 		$result = [
 			'name' => $this->name,
 			'description' => $this->description,
+			'isDangerous' => $this->isDangerous,
 			'inputSchema' => $inputSchema,
 		];
 

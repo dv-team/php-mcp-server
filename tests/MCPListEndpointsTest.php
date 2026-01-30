@@ -77,11 +77,12 @@ class MCPListEndpointsTest extends TestCase {
 		$this->assertNotNull($handler->reply);
 		$this->assertSame(22, $handler->reply['id']);
 		$this->assertIsObject($handler->reply['result']);
-		/** @var object{tools: list<object{name: string, description: string, inputSchema: object{type: string, properties: array<string, mixed>|object, required?: list<string>}}>} $result */
+		/** @var object{tools: list<object{name: string, description: string, isDangerous: bool, inputSchema: object{type: string, properties: array<string, mixed>|object, required?: list<string>}}>} $result */
 		$result = $handler->reply['result'];
 		$this->assertCount(1, $result->tools);
 		$tool = $result->tools[0];
 		$this->assertSame('echo_tool', $tool->name);
+		$this->assertFalse($tool->isDangerous);
 		$this->assertObjectHasProperty('inputSchema', $tool);
 		$inputSchema = $tool->inputSchema;
 		$this->assertSame('object', $inputSchema->type);

@@ -543,7 +543,7 @@ class MCPServer {
 
 	/**
 	 * @param object $params
-	 * @return object{tools: array<object{name: string, description: string, inputSchema?: object, returnSchema?: object}>}
+	 * @return object{tools: array<object{name: string, description: string, isDangerous: bool, inputSchema?: object, returnSchema?: object}>}
 	 */
 	private function listTools(object $params): object {
 		$tools = [];
