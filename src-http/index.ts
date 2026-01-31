@@ -5,7 +5,44 @@ import { createEntraAdapter, loadEntraConfig, type EntraAdapter } from "./src/en
 
 loadEnv({ path: fileURLToPath(new URL(".env", import.meta.url)) });
 
+function normalizeBaseUrl(value: string): string {
+	const trimmed = value.trim();
+	if (!trimmed) return "";
+	return trimmed.replace(/\/+$/, "");
+}
+
+function normalizeRedirectUri(value: string): string {
+	const trimmed = value.trim();
+	if (!trimmed) return "";
+	try {
+		const url = new URL(trimmed);
+		if (url.pathname.length > 1) {
+			url.pathname = url.pathname.replace(/\/+$/, "");
+		}
+		url.pathname = url.pathname.replace(/\/{2,}/g, "/");
+		return url.toString();
+	} catch {
+		return trimmed.replace(/\/+$/, "");
+	}
+}
+
+function buildRedirectUriSet(values: string[]): Set<string> {
+	const set = new Set<string>();
+	for (const raw of values) {
+		const trimmed = raw.trim();
+		if (!trimmed) continue;
+		set.add(trimmed);
+		set.add(normalizeRedirectUri(trimmed));
+	}
+	return set;
+}
+
 const encoder = new TextEncoder();
+
+const redirectUris = (process.env.OAUTH_REDIRECT_URIS ?? "http://localhost:3000/callback")
+	.split(",")
+	.map((value) => value.trim())
+	.filter(Boolean);
 
 const config = {
 	port: Number.parseInt(process.env.PORT ?? "8787", 10),
@@ -15,16 +52,14 @@ const config = {
 	requireAuth: (process.env.MCP_REQUIRE_AUTH ?? "false") === "true",
 	clientId: process.env.OAUTH_CLIENT_ID ?? "mcp-client",
 	clientSecret: process.env.OAUTH_CLIENT_SECRET ?? "mcp-secret",
-	redirectUris: (process.env.OAUTH_REDIRECT_URIS ?? "http://localhost:3000/callback")
-		.split(",")
-		.map((value) => value.trim())
-		.filter(Boolean),
+	redirectUris,
+	redirectUriSet: buildRedirectUriSet(redirectUris),
 	authAdapter: (process.env.AUTH_ADAPTER ?? "local").toLowerCase(),
 	authStateTtlSeconds: Number.parseInt(process.env.OAUTH_STATE_TTL_SECONDS ?? "900", 10),
 	codeTtlSeconds: Number.parseInt(process.env.OAUTH_CODE_TTL_SECONDS ?? "600", 10),
 	tokenTtlSeconds: Number.parseInt(process.env.OAUTH_TOKEN_TTL_SECONDS ?? "3600", 10),
 	refreshTtlSeconds: Number.parseInt(process.env.OAUTH_REFRESH_TTL_SECONDS ?? "86400", 10),
-	baseUrl: process.env.BASE_URL ?? "",
+	baseUrl: normalizeBaseUrl(process.env.BASE_URL ?? ""),
 	corsAllowOrigin: process.env.CORS_ALLOW_ORIGIN ?? "*",
 	entra: loadEntraConfig(process.env)
 };
@@ -351,6 +386,12 @@ function getEntraAdapter(): EntraAdapter {
 	return entraAdapter;
 }
 
+function isAllowedRedirectUri(redirectUri: string): boolean {
+	if (config.redirectUriSet.has(redirectUri)) return true;
+	const normalized = normalizeRedirectUri(redirectUri);
+	return config.redirectUriSet.has(normalized);
+}
+
 type AuthAdapter = {
 	name: string;
 	authorize: (request: Request, context: AuthorizationRequest) => Promise<Response>;
@@ -396,7 +437,7 @@ async function handleAuthorize(request: Request, url: URL): Promise<Response> {
 	}
 
 	const redirectUri = url.searchParams.get("redirect_uri");
-	if (!redirectUri || !config.redirectUris.includes(redirectUri)) {
+	if (!redirectUri || !isAllowedRedirectUri(redirectUri)) {
 		return oauthError(400, "invalid_request", "redirect_uri is not allowed.");
 	}
 
