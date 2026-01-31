@@ -216,7 +216,7 @@ class MCPServer {
 			while(!feof($resource)) {
 				/** @var string|false $line */
 				$line = fgets($resource, null);
-				if($line === false) {
+				if($line === false || trim($line) === '') {
 					continue;
 				}
 
