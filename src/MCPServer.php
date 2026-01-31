@@ -169,7 +169,11 @@ class MCPServer {
 	}
 
 	public function registerToolsFromObject(object $obj): void {
-		AttributeToolRegistrar::register($obj, $this);
+		AttributeToolRegistrar::registerObject($obj, $this);
+	}
+
+	public function registerToolFromMethod(callable $method): void {
+		AttributeToolRegistrar::registerFn($method, $this);
 	}
 
 	/**

@@ -17,7 +17,7 @@ class AttributeToolRegistrarTest extends TestCase {
 		$handler = new CapturingResponseHandler();
 		$server = new MCPServer('test', $handler);
 
-		AttributeToolRegistrar::register(new AttributeToolRegistrarFixture(), $server);
+		AttributeToolRegistrar::registerObject(new AttributeToolRegistrarFixture(), $server);
 
 		$request = json_encode([
 			'method' => 'tools/list',
@@ -117,7 +117,7 @@ class AttributeToolRegistrarTest extends TestCase {
 		$handler = new CapturingResponseHandler();
 		$server = new MCPServer('test', $handler);
 
-		AttributeToolRegistrar::register(new AttributeToolRegistrarFixture(), $server);
+		AttributeToolRegistrar::registerObject(new AttributeToolRegistrarFixture(), $server);
 
 		$request = json_encode([
 			'method' => 'tools/call',
@@ -141,7 +141,7 @@ class AttributeToolRegistrarTest extends TestCase {
 		$handler = new CapturingResponseHandler();
 		$server = new MCPServer('test', $handler);
 
-		AttributeToolRegistrar::register(new AttributeToolRegistrarFixture(), $server);
+		AttributeToolRegistrar::registerObject(new AttributeToolRegistrarFixture(), $server);
 
 		$request = json_encode([
 			'method' => 'tools/call',
@@ -158,5 +158,51 @@ class AttributeToolRegistrarTest extends TestCase {
 		$this->assertSame(42, $handler->error['id']);
 		$this->assertSame("Missing required argument 'b'", $handler->error['message']);
 		$this->assertSame(100, $handler->error['code']);
+	}
+
+	public function testRegisterMethodRegistersSingleTool(): void {
+		$handler = new CapturingResponseHandler();
+		$server = new MCPServer('test', $handler);
+		$fixture = new AttributeToolRegistrarFixture();
+
+		AttributeToolRegistrar::registerMethod($fixture, new \ReflectionMethod($fixture, 'sum'), $server);
+
+		$request = json_encode([
+			'method' => 'tools/list',
+			'id' => 51,
+			'params' => (object) [],
+		], JSON_THROW_ON_ERROR);
+
+		$server->run($request);
+
+		$this->assertNotNull($handler->reply);
+		$this->assertSame(51, $handler->reply['id']);
+		/** @var object{tools: list<object{name: string}>} $result */
+		$result = $handler->reply['result'];
+		$this->assertCount(1, $result->tools);
+		$this->assertSame('sum', $result->tools[0]->name);
+	}
+
+	public function testRegisterFnRegistersInstanceCallable(): void {
+		$handler = new CapturingResponseHandler();
+		$server = new MCPServer('test', $handler);
+		$fixture = new AttributeToolRegistrarFixture();
+
+		AttributeToolRegistrar::registerFn($fixture->echoMessage(...), $server);
+
+		$request = json_encode([
+			'method' => 'tools/list',
+			'id' => 52,
+			'params' => (object) [],
+		], JSON_THROW_ON_ERROR);
+
+		$server->run($request);
+
+		$this->assertNotNull($handler->reply);
+		$this->assertSame(52, $handler->reply['id']);
+		/** @var object{tools: list<object{name: string}>} $result */
+		$result = $handler->reply['result'];
+		$this->assertCount(1, $result->tools);
+		$this->assertSame('echo', $result->tools[0]->name);
 	}
 }

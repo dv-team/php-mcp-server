@@ -2,6 +2,7 @@
 
 namespace McpSrv\Common\Tools;
 
+use Closure;
 use McpSrv\Common\Attributes\MCPDescription;
 use McpSrv\Common\Attributes\MCPTool as MCPToolAttribute;
 use McpSrv\Common\MCPInvalidArgumentException;
@@ -11,6 +12,7 @@ use McpSrv\Types\Tools\MCPToolInputSchema;
 use McpSrv\Types\Tools\MCPToolProperties;
 use McpSrv\Types\Tools\MCPToolResult;
 use ReflectionClass;
+use ReflectionFunction;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionParameter;
@@ -19,32 +21,50 @@ use ReflectionParameter;
  * @internal Use {@see MCPServer} instead.
  */
 class AttributeToolRegistrar {
-	public static function register(object $toolCollection, MCPServer $server, bool $isDangerous = false): void {
+	public static function registerObject(object $toolCollection, MCPServer $server, bool $isDangerous = false): void {
 		$reflection = new ReflectionClass($toolCollection);
 
 		foreach($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-			$attributes = $method->getAttributes(MCPToolAttribute::class);
-
-			if(!count($attributes)) {
-				continue;
-			}
-
-			/** @var MCPToolAttribute $toolAttribute */
-			$toolAttribute = $attributes[0]->newInstance();
-
-			$inputSchema = self::buildInputSchema($toolAttribute->parametersSchema, $method);
-
-			$server->registerTool(
-				name: $toolAttribute->name,
-				description: $toolAttribute->description,
-				inputSchema: $inputSchema,
-				isDangerous: $isDangerous || $toolAttribute->isDangerous,
-				handler: static function(object $arguments) use ($toolCollection, $method): MCPToolResult {
-					return self::invokeTool($toolCollection, $method, $arguments);
-				},
-				returnSchema: $toolAttribute->returnSchema === null ? null : (object) $toolAttribute->returnSchema
-			);
+			self::registerMethod($toolCollection, $method, $server, $isDangerous);
 		}
+	}
+
+	public static function registerMethod(object $toolCollection, ReflectionMethod $method, MCPServer $server, bool $isDangerous = false): void {
+		$attributes = $method->getAttributes(MCPToolAttribute::class);
+
+		if(!count($attributes)) {
+			return;
+		}
+
+		/** @var MCPToolAttribute $toolAttribute */
+		$toolAttribute = $attributes[0]->newInstance();
+
+		$inputSchema = self::buildInputSchema($toolAttribute->parametersSchema, $method);
+
+		$server->registerTool(
+			name: $toolAttribute->name,
+			description: $toolAttribute->description,
+			inputSchema: $inputSchema,
+			isDangerous: $isDangerous || $toolAttribute->isDangerous,
+			handler: static function(object $arguments) use ($toolCollection, $method): MCPToolResult {
+				return self::invokeTool($toolCollection, $method, $arguments);
+			},
+			returnSchema: $toolAttribute->returnSchema === null ? null : (object) $toolAttribute->returnSchema
+		);
+	}
+
+	public static function registerFn(callable $callable, MCPServer $server, bool $isDangerous = false): void {
+		$reflection = new ReflectionFunction(Closure::fromCallable($callable));
+		$object = $reflection->getClosureThis();
+		$scopeClass = $reflection->getClosureScopeClass();
+
+		if(!$object || !$scopeClass) {
+			throw new MCPInvalidArgumentException('registerFn expects a first-class callable from an instance method');
+		}
+
+		$method = $scopeClass->getMethod($reflection->getName());
+
+		self::registerMethod($object, $method, $server, $isDangerous);
 	}
 
 	/**
