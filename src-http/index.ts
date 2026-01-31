@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { config as loadEnv } from "dotenv";
 import { fileURLToPath } from "url";
+import { createEntraAdapter, loadEntraConfig, type EntraAdapter } from "./src/entra-id";
 
 loadEnv({ path: fileURLToPath(new URL(".env", import.meta.url)) });
 
@@ -18,11 +19,14 @@ const config = {
 		.split(",")
 		.map((value) => value.trim())
 		.filter(Boolean),
+	authAdapter: (process.env.AUTH_ADAPTER ?? "local").toLowerCase(),
+	authStateTtlSeconds: Number.parseInt(process.env.OAUTH_STATE_TTL_SECONDS ?? "900", 10),
 	codeTtlSeconds: Number.parseInt(process.env.OAUTH_CODE_TTL_SECONDS ?? "600", 10),
 	tokenTtlSeconds: Number.parseInt(process.env.OAUTH_TOKEN_TTL_SECONDS ?? "3600", 10),
 	refreshTtlSeconds: Number.parseInt(process.env.OAUTH_REFRESH_TTL_SECONDS ?? "86400", 10),
 	baseUrl: process.env.BASE_URL ?? "",
-	corsAllowOrigin: process.env.CORS_ALLOW_ORIGIN ?? "*"
+	corsAllowOrigin: process.env.CORS_ALLOW_ORIGIN ?? "*",
+	entra: loadEntraConfig(process.env)
 };
 
 type AuthCodeRecord = {
@@ -47,10 +51,20 @@ type RefreshRecord = {
 	accessToken: string;
 };
 
+type AuthorizationRequest = {
+	clientId: string;
+	redirectUri: string;
+	scope?: string;
+	clientState?: string;
+	codeChallenge?: string;
+	codeChallengeMethod?: string;
+};
+
 const authCodes = new Map<string, AuthCodeRecord>();
 const accessTokens = new Map<string, TokenRecord>();
 const refreshTokens = new Map<string, RefreshRecord>();
 type CliProcess = Bun.Subprocess<"pipe", "pipe", "pipe">;
+let entraAdapter: EntraAdapter | null = null;
 
 function spawnCliProcess(): CliProcess {
 	const proc = Bun.spawn(["/bin/sh", "-lc", config.cliCommand], {
@@ -169,6 +183,9 @@ function purgeExpired(): void {
 			refreshTokens.delete(key);
 		}
 	}
+	if (config.authAdapter === "entra") {
+		getEntraAdapter().purgeExpired();
+	}
 }
 
 function oauthError(status: number, error: string, description?: string): Response {
@@ -275,6 +292,21 @@ function getIssuer(request: Request): string {
 	return `${protocol}://${host}`;
 }
 
+function issueAuthorizationCode(request: AuthorizationRequest): string {
+	const code = randomToken(24);
+	const expiresAt = nowMs() + config.codeTtlSeconds * 1000;
+	authCodes.set(code, {
+		clientId: request.clientId,
+		redirectUri: request.redirectUri,
+		scope: request.scope,
+		codeChallenge: request.codeChallenge,
+		codeChallengeMethod: request.codeChallengeMethod,
+		expiresAt
+	});
+	return code;
+}
+
+
 function issueToken(clientId: string, scope?: string): { accessToken: string; refreshToken: string; expiresIn: number } {
 	const accessToken = randomToken(32);
 	const refreshToken = randomToken(32);
@@ -300,6 +332,55 @@ function validateBearer(request: Request): TokenRecord | null {
 	return record;
 }
 
+function getEntraAdapter(): EntraAdapter {
+	if (!entraAdapter) {
+		entraAdapter = createEntraAdapter({
+			config: config.entra,
+			stateTtlSeconds: config.authStateTtlSeconds,
+			nowMs,
+			isExpired,
+			randomToken,
+			createCodeChallenge,
+			issueAuthorizationCode,
+			getIssuer,
+			oauthError,
+			corsHeaders
+		});
+	}
+
+	return entraAdapter;
+}
+
+type AuthAdapter = {
+	name: string;
+	authorize: (request: Request, context: AuthorizationRequest) => Promise<Response>;
+	callback?: (request: Request, url: URL) => Promise<Response>;
+};
+
+async function handleLocalAuthorize(context: AuthorizationRequest): Promise<Response> {
+	const code = issueAuthorizationCode(context);
+	const redirect = new URL(context.redirectUri);
+	redirect.searchParams.set("code", code);
+	if (context.clientState) redirect.searchParams.set("state", context.clientState);
+	return Response.redirect(redirect.toString(), 302);
+}
+
+const authAdapters: Record<string, AuthAdapter> = {
+	local: {
+		name: "local",
+		authorize: async (_request, context) => handleLocalAuthorize(context)
+	},
+	entra: {
+		name: "entra",
+		authorize: async (request, context) => getEntraAdapter().authorize(request, context),
+		callback: async (request, url) => getEntraAdapter().callback(request, url)
+	}
+};
+
+function getAuthAdapter(): AuthAdapter {
+	return authAdapters[config.authAdapter] ?? authAdapters.local;
+}
+
 async function handleAuthorize(request: Request, url: URL): Promise<Response> {
 	if (request.method !== "GET") return new Response("", { status: 405, headers: corsHeaders() });
 	purgeExpired();
@@ -319,26 +400,17 @@ async function handleAuthorize(request: Request, url: URL): Promise<Response> {
 		return oauthError(400, "invalid_request", "redirect_uri is not allowed.");
 	}
 
-	const scope = url.searchParams.get("scope") ?? undefined;
-	const state = url.searchParams.get("state") ?? undefined;
-	const codeChallenge = url.searchParams.get("code_challenge") ?? undefined;
-	const codeChallengeMethod = url.searchParams.get("code_challenge_method") ?? "plain";
-
-	const code = randomToken(24);
-	const expiresAt = nowMs() + config.codeTtlSeconds * 1000;
-	authCodes.set(code, {
+	const context: AuthorizationRequest = {
 		clientId,
 		redirectUri,
-		scope,
-		codeChallenge,
-		codeChallengeMethod,
-		expiresAt
-	});
+		scope: url.searchParams.get("scope") ?? undefined,
+		clientState: url.searchParams.get("state") ?? undefined,
+		codeChallenge: url.searchParams.get("code_challenge") ?? undefined,
+		codeChallengeMethod: url.searchParams.get("code_challenge_method") ?? "plain"
+	};
 
-	const redirect = new URL(redirectUri);
-	redirect.searchParams.set("code", code);
-	if (state) redirect.searchParams.set("state", state);
-	return Response.redirect(redirect.toString(), 302);
+	const adapter = getAuthAdapter();
+	return adapter.authorize(request, context);
 }
 
 async function handleToken(request: Request): Promise<Response> {
@@ -584,6 +656,14 @@ const server = Bun.serve({
 				return handleMetadata(request);
 			case "/oauth/authorize":
 				return handleAuthorize(request, url);
+			case "/oauth/entra/callback":
+				if (config.authAdapter !== "entra") {
+					return new Response("Not found\n", {
+						status: 404,
+						headers: { "content-type": "text/plain; charset=utf-8", ...corsHeaders() }
+					});
+				}
+				return getEntraAdapter().callback(request, url);
 			case "/oauth/token":
 				return handleToken(request);
 			case "/mcp":
@@ -601,4 +681,9 @@ console.log(`Streamable-HTTP MCP server listening on http://localhost:${server.p
 console.log(`MCP CLI command: ${config.cliCommand}`);
 if (config.cliWorkingDir) {
 	console.log(`MCP CLI working dir: ${config.cliWorkingDir}`);
+}
+const adapter = getAuthAdapter();
+console.log(`Auth adapter: ${adapter.name}`);
+if (adapter.name === "entra" && config.entra.redirectUri) {
+	console.log(`Entra redirect URI: ${config.entra.redirectUri}`);
 }

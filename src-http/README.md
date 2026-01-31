@@ -27,11 +27,12 @@ bun run start
 - `GET /.well-known/oauth-authorization-server` OAuth2 Metadata
 - `GET /oauth/authorize` Minimaler OAuth2 Authorization Code Flow
 - `POST /oauth/token` Token-Ausgabe (authorization_code, client_credentials, refresh_token)
+- `GET /oauth/entra/callback` Entra-ID Callback (nur bei `AUTH_ADAPTER=entra`)
 - `GET /healthz` Health Check
 
 ## OAuth 2 (ChatGPT-kompatibel, minimal)
 
-Die OAuth2-Implementierung ist bewusst minimal und nutzt In-Memory Stores. Sie ist auf ChatGPT-Kompatibilitaet ausgelegt, nicht auf eine vollstaendige Provider-Implementierung. Fuer eine spaetere Erweiterung sind OAuth2-Bibliotheken bereits als Abhaengigkeiten vorhanden.
+Die OAuth2-Implementierung ist bewusst minimal und nutzt In-Memory Stores. Sie ist auf ChatGPT-Kompatibilitaet ausgelegt, nicht auf eine vollstaendige Provider-Implementierung. Fuer die eigentliche Benutzer-Authentifizierung koennen Adapter konfiguriert werden. Der Standardadapter (`local`) gibt sofort einen Code aus. Mit `entra` wird die Anmeldung ueber Entra ID abgewickelt und erst nach erfolgreicher Verifizierung ein Grant erzeugt.
 
 ## Konfiguration (Umgebungsvariablen)
 
@@ -43,11 +44,22 @@ Die OAuth2-Implementierung ist bewusst minimal und nutzt In-Memory Stores. Sie i
 - `OAUTH_CLIENT_ID` (Standard: `mcp-client`)
 - `OAUTH_CLIENT_SECRET` (Standard: `mcp-secret`)
 - `OAUTH_REDIRECT_URIS` (CSV, Standard: `http://localhost:3000/callback`)
+- `AUTH_ADAPTER` (`local|entra`, Standard: `local`)
+- `OAUTH_STATE_TTL_SECONDS` (Standard: `900`)
 - `OAUTH_CODE_TTL_SECONDS` (Standard: `600`)
 - `OAUTH_TOKEN_TTL_SECONDS` (Standard: `3600`)
 - `OAUTH_REFRESH_TTL_SECONDS` (Standard: `86400`)
 - `BASE_URL` (z. B. `https://mcp.example.com` fuer korrekte OAuth Issuer URLs)
 - `CORS_ALLOW_ORIGIN` (Standard: `*`)
+
+### Entra ID (AUTH_ADAPTER=entra)
+
+- `ENTRA_TENANT_ID` (z. B. `common` oder Tenant GUID)
+- `ENTRA_CLIENT_ID`
+- `ENTRA_CLIENT_SECRET`
+- `ENTRA_REDIRECT_URI` (vollstaendige Callback-URL; wenn leer, wird `${BASE_URL}/oauth/entra/callback` genutzt)
+- `ENTRA_SCOPES` (Standard: `openid profile email`)
+- `ENTRA_AUTHORITY_HOST` (Standard: `https://login.microsoftonline.com`)
 
 ## Beispielaufruf (Chunked HTTP)
 
