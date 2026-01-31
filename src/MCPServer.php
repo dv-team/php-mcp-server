@@ -220,7 +220,11 @@ class MCPServer {
 					continue;
 				}
 
-				$this->logger?->debug("IN", (array) json_decode(json: $line, associative: false, flags: JSON_THROW_ON_ERROR));
+				try {
+					$this->logger?->debug("IN", (array) json_decode(json: $line, associative: false, flags: JSON_THROW_ON_ERROR));
+				} catch (JsonException $e) {
+					$this->logger->error("IN ERROR $line // {$e->getMessage()}", []);
+				}
 
 				$this->run($line);
 
