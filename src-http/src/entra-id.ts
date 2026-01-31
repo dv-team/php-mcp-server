@@ -41,6 +41,7 @@ export type EntraAdapterDependencies = {
 	getIssuer: (request: Request) => string;
 	oauthError: (status: number, error: string, description?: string) => Response;
 	corsHeaders: () => Record<string, string>;
+	log?: (event: string, payload?: Record<string, unknown>) => void;
 };
 
 type EntraTokenPayload = {
@@ -152,6 +153,10 @@ export function createEntraAdapter(deps: EntraAdapterDependencies): EntraAdapter
 		}
 	}
 
+	function log(event: string, payload: Record<string, unknown> = {}): void {
+		deps.log?.(event, payload);
+	}
+
 	function buildEntraAuthorizeUrl(
 		request: Request,
 		state: string,
@@ -243,7 +248,10 @@ export function createEntraAdapter(deps: EntraAdapterDependencies): EntraAdapter
 
 	async function authorize(request: Request, context: AuthorizationRequest): Promise<Response> {
 		const configError = validateEntraConfig(deps.config);
-		if (configError) return deps.oauthError(500, "server_error", configError);
+		if (configError) {
+			log("entra.config.error", { error: configError });
+			return deps.oauthError(500, "server_error", configError);
+		}
 
 		const state = deps.randomToken(18);
 		const nonce = deps.randomToken(18);
@@ -258,20 +266,35 @@ export function createEntraAdapter(deps: EntraAdapterDependencies): EntraAdapter
 			codeVerifier
 		});
 
+		log("entra.authorize.start", {
+			client_id: context.clientId,
+			redirect_uri: context.redirectUri,
+			scope: context.scope ?? undefined
+		});
+
 		const redirectUrl = buildEntraAuthorizeUrl(request, state, codeChallenge, nonce);
+		log("entra.authorize.redirect", { authorize_url: redirectUrl });
 		return Response.redirect(redirectUrl, 302);
 	}
 
 	async function callback(request: Request, url: URL): Promise<Response> {
 		if (request.method !== "GET") return new Response("", { status: 405, headers: deps.corsHeaders() });
 		const configError = validateEntraConfig(deps.config);
-		if (configError) return deps.oauthError(500, "server_error", configError);
+		if (configError) {
+			log("entra.config.error", { error: configError });
+			return deps.oauthError(500, "server_error", configError);
+		}
 		purgeExpired();
 
 		const error = url.searchParams.get("error");
 		const errorDescription = url.searchParams.get("error_description") ?? undefined;
 		const state = url.searchParams.get("state");
 		if (error) {
+			log("entra.callback.error", {
+				error,
+				error_description: errorDescription ?? undefined,
+				has_state: Boolean(state)
+			});
 			if (state) {
 				const pending = pendingAuthRequests.get(state);
 				if (pending) {
@@ -284,21 +307,30 @@ export function createEntraAdapter(deps: EntraAdapterDependencies): EntraAdapter
 
 		const code = url.searchParams.get("code");
 		if (!state || !code) {
+			log("entra.callback.invalid", { reason: "missing_state_or_code" });
 			return deps.oauthError(400, "invalid_request", "code and state are required.");
 		}
 
+		log("entra.callback.start", { has_state: Boolean(state), has_code: Boolean(code) });
+
 		const pending = pendingAuthRequests.get(state);
 		if (!pending) {
+			log("entra.callback.invalid", { reason: "unknown_state" });
 			return deps.oauthError(400, "invalid_request", "Unknown or expired state.");
 		}
 		if (deps.isExpired(pending.expiresAt)) {
 			pendingAuthRequests.delete(state);
+			log("entra.callback.invalid", { reason: "state_expired" });
 			return deps.oauthError(400, "invalid_request", "Authorization request expired.");
 		}
 
 		const exchange = await exchangeEntraCode(request, code, pending.codeVerifier);
 		if (!exchange.ok) {
 			pendingAuthRequests.delete(state);
+			log("entra.token.exchange.failed", {
+				error: exchange.error,
+				error_description: exchange.errorDescription ?? undefined
+			});
 			return redirectWithError(
 				pending.redirectUri,
 				exchange.error,
@@ -310,6 +342,10 @@ export function createEntraAdapter(deps: EntraAdapterDependencies): EntraAdapter
 		const verification = await verifyEntraIdToken(exchange.idToken, pending.nonce);
 		if (!verification.ok) {
 			pendingAuthRequests.delete(state);
+			log("entra.token.verify.failed", {
+				error: verification.error,
+				error_description: verification.errorDescription ?? undefined
+			});
 			return redirectWithError(
 				pending.redirectUri,
 				verification.error,
@@ -320,6 +356,7 @@ export function createEntraAdapter(deps: EntraAdapterDependencies): EntraAdapter
 
 		pendingAuthRequests.delete(state);
 		const authCode = deps.issueAuthorizationCode(pending);
+		log("entra.callback.success", { redirect_uri: pending.redirectUri });
 		const redirect = new URL(pending.redirectUri);
 		redirect.searchParams.set("code", authCode);
 		if (pending.clientState) redirect.searchParams.set("state", pending.clientState);

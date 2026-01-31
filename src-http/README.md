@@ -44,6 +44,7 @@ Die OAuth2-Implementierung ist bewusst minimal und nutzt In-Memory Stores. Sie i
 - `OAUTH_CLIENT_ID` (Standard: `mcp-client`)
 - `OAUTH_CLIENT_SECRET` (Standard: `mcp-secret`)
 - `OAUTH_REDIRECT_URIS` (CSV, Standard: `http://localhost:3000/callback`)
+- `OAUTH_TRACE_STDOUT` (`true|false`, optional, OAuth-Flow Logging auf STDOUT)
 - `AUTH_ADAPTER` (`local|entra`, Standard: `local`)
 - `OAUTH_STATE_TTL_SECONDS` (Standard: `900`)
 - `OAUTH_CODE_TTL_SECONDS` (Standard: `600`)

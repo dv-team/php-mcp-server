@@ -11,6 +11,11 @@ function normalizeBaseUrl(value: string): string {
 	return trimmed.replace(/\/+$/, "");
 }
 
+function fingerprint(value: string | null | undefined): string | undefined {
+	if (!value) return undefined;
+	return createHash("sha256").update(value).digest("hex").slice(0, 12);
+}
+
 function normalizeRedirectUri(value: string): string {
 	const trimmed = value.trim();
 	if (!trimmed) return "";
@@ -54,6 +59,7 @@ const config = {
 	clientSecret: process.env.OAUTH_CLIENT_SECRET ?? "mcp-secret",
 	redirectUris,
 	redirectUriSet: buildRedirectUriSet(redirectUris),
+	oauthTraceStdout: (process.env.OAUTH_TRACE_STDOUT ?? "false") === "true",
 	authAdapter: (process.env.AUTH_ADAPTER ?? "local").toLowerCase(),
 	authStateTtlSeconds: Number.parseInt(process.env.OAUTH_STATE_TTL_SECONDS ?? "900", 10),
 	codeTtlSeconds: Number.parseInt(process.env.OAUTH_CODE_TTL_SECONDS ?? "600", 10),
@@ -63,6 +69,18 @@ const config = {
 	corsAllowOrigin: process.env.CORS_ALLOW_ORIGIN ?? "*",
 	entra: loadEntraConfig(process.env)
 };
+
+type AuthLogPayload = Record<string, unknown>;
+
+function logAuth(event: string, payload: AuthLogPayload = {}): void {
+	if (!config.oauthTraceStdout) return;
+	const message = {
+		event,
+		ts: new Date().toISOString(),
+		...payload
+	};
+	console.log(`[oauth] ${JSON.stringify(message)}`);
+}
 
 type AuthCodeRecord = {
 	clientId: string;
@@ -224,6 +242,7 @@ function purgeExpired(): void {
 }
 
 function oauthError(status: number, error: string, description?: string): Response {
+	logAuth("oauth.error", { status, error, error_description: description });
 	const body = {
 		error,
 		...(description ? { error_description: description } : {})
@@ -379,7 +398,8 @@ function getEntraAdapter(): EntraAdapter {
 			issueAuthorizationCode,
 			getIssuer,
 			oauthError,
-			corsHeaders
+			corsHeaders,
+			log: logAuth
 		});
 	}
 
@@ -427,17 +447,28 @@ async function handleAuthorize(request: Request, url: URL): Promise<Response> {
 	purgeExpired();
 
 	const responseType = url.searchParams.get("response_type");
+	logAuth("authorize.request", {
+		response_type: responseType ?? undefined,
+		client_id: url.searchParams.get("client_id") ?? undefined,
+		redirect_uri: url.searchParams.get("redirect_uri") ?? undefined,
+		state_fp: fingerprint(url.searchParams.get("state")),
+		scope: url.searchParams.get("scope") ?? undefined,
+		code_challenge_method: url.searchParams.get("code_challenge_method") ?? undefined
+	});
 	if (responseType !== "code") {
+		logAuth("authorize.reject", { reason: "unsupported_response_type" });
 		return oauthError(400, "unsupported_response_type", "Only response_type=code is supported.");
 	}
 
 	const clientId = url.searchParams.get("client_id");
 	if (clientId !== config.clientId) {
+		logAuth("authorize.reject", { reason: "invalid_client", client_id: clientId ?? undefined });
 		return oauthError(401, "invalid_client", "Unknown client_id.");
 	}
 
 	const redirectUri = url.searchParams.get("redirect_uri");
 	if (!redirectUri || !isAllowedRedirectUri(redirectUri)) {
+		logAuth("authorize.reject", { reason: "invalid_redirect_uri", redirect_uri: redirectUri ?? undefined });
 		return oauthError(400, "invalid_request", "redirect_uri is not allowed.");
 	}
 
@@ -451,6 +482,7 @@ async function handleAuthorize(request: Request, url: URL): Promise<Response> {
 	};
 
 	const adapter = getAuthAdapter();
+	logAuth("authorize.adapter", { adapter: adapter.name, redirect_uri: redirectUri });
 	return adapter.authorize(request, context);
 }
 
@@ -485,8 +517,20 @@ async function handleToken(request: Request): Promise<Response> {
 	const basicAuth = parseBasicAuth(authHeader);
 	const clientId = basicAuth?.clientId ?? params.client_id ?? null;
 	const clientSecret = basicAuth?.clientSecret ?? params.client_secret ?? null;
+	const grantType = params.grant_type;
+
+	logAuth("token.request", {
+		grant_type: grantType ?? undefined,
+		client_id: clientId ?? undefined,
+		has_basic_auth: Boolean(basicAuth),
+		redirect_uri: params.redirect_uri ?? undefined,
+		code_fp: fingerprint(params.code),
+		scope: params.scope ?? undefined,
+		refresh_token_fp: fingerprint(params.refresh_token)
+	});
 
 	if (!validateClient(clientId, clientSecret)) {
+		logAuth("token.reject", { reason: "invalid_client", client_id: clientId ?? undefined });
 		return new Response(JSON.stringify({ error: "invalid_client" }), {
 			status: 401,
 			headers: {
@@ -497,8 +541,8 @@ async function handleToken(request: Request): Promise<Response> {
 		});
 	}
 
-	const grantType = params.grant_type;
 	if (!grantType) {
+		logAuth("token.reject", { reason: "missing_grant_type" });
 		return oauthError(400, "invalid_request", "grant_type is required.");
 	}
 
@@ -507,28 +551,34 @@ async function handleToken(request: Request): Promise<Response> {
 		const redirectUri = params.redirect_uri;
 		const codeVerifier = params.code_verifier ?? null;
 		if (!code || !redirectUri) {
+			logAuth("token.reject", { reason: "missing_code_or_redirect", client_id: clientId ?? undefined });
 			return oauthError(400, "invalid_request", "code and redirect_uri are required.");
 		}
 		const record = authCodes.get(code);
 		if (!record || record.redirectUri !== redirectUri) {
+			logAuth("token.reject", { reason: "invalid_authorization_code", client_id: clientId ?? undefined });
 			return oauthError(400, "invalid_grant", "Invalid authorization code.");
 		}
 		if (isExpired(record.expiresAt)) {
 			authCodes.delete(code);
+			logAuth("token.reject", { reason: "authorization_code_expired", client_id: clientId ?? undefined });
 			return oauthError(400, "invalid_grant", "Authorization code expired.");
 		}
 		if (record.codeChallenge) {
 			if (!codeVerifier) {
+				logAuth("token.reject", { reason: "missing_code_verifier", client_id: clientId ?? undefined });
 				return oauthError(400, "invalid_request", "code_verifier is required.");
 			}
 			const expected = createCodeChallenge(codeVerifier, record.codeChallengeMethod ?? "plain");
 			if (!secureEqual(expected, record.codeChallenge)) {
+				logAuth("token.reject", { reason: "pkce_verification_failed", client_id: clientId ?? undefined });
 				return oauthError(400, "invalid_grant", "PKCE verification failed.");
 			}
 		}
 
 		authCodes.delete(code);
 		const token = issueToken(record.clientId, record.scope);
+		logAuth("token.issue", { grant_type: grantType, client_id: record.clientId, scope: record.scope ?? undefined });
 		return jsonResponse(200, {
 			access_token: token.accessToken,
 			token_type: "bearer",
@@ -544,6 +594,7 @@ async function handleToken(request: Request): Promise<Response> {
 	if (grantType === "client_credentials") {
 		const scope = params.scope ?? undefined;
 		const token = issueToken(clientId!, scope);
+		logAuth("token.issue", { grant_type: grantType, client_id: clientId ?? undefined, scope });
 		return jsonResponse(200, {
 			access_token: token.accessToken,
 			token_type: "bearer",
@@ -558,17 +609,21 @@ async function handleToken(request: Request): Promise<Response> {
 	if (grantType === "refresh_token") {
 		const refreshToken = params.refresh_token;
 		if (!refreshToken) {
+			logAuth("token.reject", { reason: "missing_refresh_token", client_id: clientId ?? undefined });
 			return oauthError(400, "invalid_request", "refresh_token is required.");
 		}
 		const record = refreshTokens.get(refreshToken);
 		if (!record || record.clientId !== clientId) {
+			logAuth("token.reject", { reason: "invalid_refresh_token", client_id: clientId ?? undefined });
 			return oauthError(400, "invalid_grant", "Invalid refresh_token.");
 		}
 		if (isExpired(record.expiresAt)) {
 			refreshTokens.delete(refreshToken);
+			logAuth("token.reject", { reason: "refresh_token_expired", client_id: clientId ?? undefined });
 			return oauthError(400, "invalid_grant", "refresh_token expired.");
 		}
 		const token = issueToken(record.clientId, record.scope);
+		logAuth("token.issue", { grant_type: grantType, client_id: record.clientId, scope: record.scope ?? undefined });
 		return jsonResponse(200, {
 			access_token: token.accessToken,
 			token_type: "bearer",
@@ -581,6 +636,7 @@ async function handleToken(request: Request): Promise<Response> {
 		});
 	}
 
+	logAuth("token.reject", { reason: "unsupported_grant_type", grant_type: grantType });
 	return oauthError(400, "unsupported_grant_type", "Unsupported grant_type.");
 }
 
@@ -725,6 +781,9 @@ if (config.cliWorkingDir) {
 }
 const adapter = getAuthAdapter();
 console.log(`Auth adapter: ${adapter.name}`);
+if (config.oauthTraceStdout) {
+	console.log("OAuth trace: enabled (stdout)");
+}
 if (adapter.name === "entra" && config.entra.redirectUri) {
 	console.log(`Entra redirect URI: ${config.entra.redirectUri}`);
 }
