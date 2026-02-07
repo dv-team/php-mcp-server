@@ -44,12 +44,12 @@ use Throwable;
  *     uri: string,
  *     name: string,
  *     description: null|string,
- *     handler: null|callable(object $args): MCPResource[],
+ *     handler: null|TResourceHandler,
  *     mimeType: null|string,
  *     inputSchema: TResourceInputSchema
  * }
  *
- * @phpstan-type TResourceHandler callable(object{uri: string, arguments: object}): iterable<MCPResource>
+ * @phpstan-type TResourceHandler callable(object $uriArguments, object $inputArguments): iterable<MCPResource>
  *
  * @phpstan-type TResourceTemplateProperty array{type: string, name: string, description?: string, required?: bool}
  *
@@ -108,7 +108,7 @@ class MCPServer {
 	 * @param string $uri
 	 * @param string $name
 	 * @param null|string $description
-	 * @param null|callable(object $args): MCPResource[] $handler
+	 * @param null|TResourceHandler $handler
 	 * @param array<string, mixed> $properties
 	 * @param string[] $required
 	 */
@@ -531,10 +531,7 @@ class MCPServer {
 			}
 
 			/** @var iterable<MCPResource> $resources */
-			$resources = $handler((object) [
-				'uri' => $params->uri,
-				'arguments' => $requestArguments,
-			]);
+			$resources = $handler((object) [], $requestArguments);
 
 			$result = [];
 			foreach($resources as $resource) {
@@ -562,10 +559,7 @@ class MCPServer {
 			$arguments = $this->buildResourceTemplateArguments($template, $matches, $requestArguments);
 
 			/** @var iterable<MCPResource> $resources */
-			$resources = $handler((object) [
-				'uri' => $params->uri,
-				'arguments' => $arguments,
-			]);
+			$resources = $handler((object) $matches, $arguments);
 
 			$result = [];
 			foreach($resources as $resource) {

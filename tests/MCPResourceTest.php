@@ -104,7 +104,8 @@ class MCPResourceTest extends TestCase {
 	public function testResourceTemplateHandlerUsesParsedArguments(): void {
 		$handler = new CapturingResponseHandler();
 		$server = new MCPServer('test', $handler);
-		$seenArgs = null;
+		$seenUriArgs = null;
+		$seenInputArgs = null;
 
 		$server->registerResourceTemplate(
 			uriTemplate: 'file://{path}',
@@ -113,8 +114,9 @@ class MCPResourceTest extends TestCase {
 				['name' => 'path', 'type' => 'string', 'description' => 'path', 'required' => true],
 				['name' => 'format', 'type' => 'string', 'description' => 'format'],
 			],
-			handler: function(object $args) use (&$seenArgs): array {
-				$seenArgs = $args;
+			handler: function(object $uriArgs, object $inputArgs) use (&$seenUriArgs, &$seenInputArgs): array {
+				$seenUriArgs = $uriArgs;
+				$seenInputArgs = $inputArgs;
 				return [new MCPResource('ok', 'text/plain')];
 			}
 		);
@@ -132,10 +134,11 @@ class MCPResourceTest extends TestCase {
 
 		$this->assertNull($handler->error);
 		$this->assertNotNull($handler->reply);
-		$this->assertNotNull($seenArgs);
-		$this->assertSame('file://demo.txt', $seenArgs->uri ?? null);
-		$this->assertSame('demo.txt', $seenArgs->arguments->path ?? null);
-		$this->assertSame('text', $seenArgs->arguments->format ?? null);
+		$this->assertNotNull($seenUriArgs);
+		$this->assertNotNull($seenInputArgs);
+		$this->assertSame('demo.txt', $seenUriArgs->path ?? null);
+		$this->assertSame('demo.txt', $seenInputArgs->path ?? null);
+		$this->assertSame('text', $seenInputArgs->format ?? null);
 
 		/** @var array{contents: array<int, MCPResource>} $result */
 		$result = $handler->reply['result'];
