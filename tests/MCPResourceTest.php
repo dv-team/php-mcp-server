@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace McpSrv;
 
 use McpSrv\Common\CapturingResponseHandler;
+use McpSrv\Common\Resources\ResourceRequest;
 use McpSrv\Types\Resources\MCPResource;
 use PHPUnit\Framework\TestCase;
 
@@ -65,7 +66,7 @@ class MCPResourceTest extends TestCase {
 				['name' => 'path', 'type' => 'string', 'description' => 'path', 'required' => true],
 				['name' => 'format', 'type' => 'string', 'description' => 'format'],
 			],
-			handler: static fn (object $args): array => []
+			handler: static fn (ResourceRequest $request): array => []
 		);
 
 		$request = json_encode([
@@ -104,8 +105,7 @@ class MCPResourceTest extends TestCase {
 	public function testResourceTemplateHandlerUsesParsedArguments(): void {
 		$handler = new CapturingResponseHandler();
 		$server = new MCPServer('test', $handler);
-		$seenUriArgs = null;
-		$seenInputArgs = null;
+		$seenRequest = null;
 
 		$server->registerResourceTemplate(
 			uriTemplate: 'file://{path}',
@@ -114,9 +114,8 @@ class MCPResourceTest extends TestCase {
 				['name' => 'path', 'type' => 'string', 'description' => 'path', 'required' => true],
 				['name' => 'format', 'type' => 'string', 'description' => 'format'],
 			],
-			handler: function(object $uriArgs, object $inputArgs) use (&$seenUriArgs, &$seenInputArgs): array {
-				$seenUriArgs = $uriArgs;
-				$seenInputArgs = $inputArgs;
+			handler: function(ResourceRequest $request) use (&$seenRequest): array {
+				$seenRequest = $request;
 				return [new MCPResource('ok', 'text/plain')];
 			}
 		);
@@ -134,11 +133,13 @@ class MCPResourceTest extends TestCase {
 
 		$this->assertNull($handler->error);
 		$this->assertNotNull($handler->reply);
-		$this->assertNotNull($seenUriArgs);
-		$this->assertNotNull($seenInputArgs);
-		$this->assertSame('demo.txt', $seenUriArgs->path ?? null);
-		$this->assertSame('demo.txt', $seenInputArgs->path ?? null);
-		$this->assertSame('text', $seenInputArgs->format ?? null);
+		$this->assertInstanceOf(ResourceRequest::class, $seenRequest);
+		/** @var ResourceRequest $request */
+		$request = $seenRequest;
+		$this->assertSame('file://demo.txt', $request->uri);
+		$this->assertSame('demo.txt', $request->parameters->path ?? null);
+		$this->assertSame('ignored.txt', $request->arguments->path ?? null);
+		$this->assertSame('text', $request->arguments->format ?? null);
 
 		/** @var array{contents: array<int, MCPResource>} $result */
 		$result = $handler->reply['result'];

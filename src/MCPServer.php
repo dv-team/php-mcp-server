@@ -6,6 +6,7 @@ use JsonException;
 use McpSrv\Common\MCPException;
 use McpSrv\Common\MCPGeneralException;
 use McpSrv\Common\MCPInvalidArgumentException;
+use McpSrv\Common\Resources\ResourceRequest;
 use McpSrv\Common\Response\ResponseHandlerInterface;
 use McpSrv\Common\Tools\AttributeToolRegistrar;
 use McpSrv\Types\MCPPrompt;
@@ -49,7 +50,7 @@ use Throwable;
  *     inputSchema: TResourceInputSchema
  * }
  *
- * @phpstan-type TResourceHandler callable(object $uriArguments, object $inputArguments): iterable<MCPResource>
+ * @phpstan-type TResourceHandler callable(ResourceRequest $request): iterable<MCPResource>
  *
  * @phpstan-type TResourceTemplateProperty array{type: string, name: string, description?: string, required?: bool}
  *
@@ -484,11 +485,10 @@ class MCPServer {
 
 	/**
 	 * @param TResourceTemplate $template
-	 * @param array<string, string> $matches
 	 * @param object $requestArguments
 	 * @return object
 	 */
-	private function buildResourceTemplateArguments(array $template, array $matches, object $requestArguments): object {
+	private function buildResourceTemplateArguments(array $template, object $requestArguments): object {
 		if(empty($template['properties'])) {
 			return $requestArguments;
 		}
@@ -496,13 +496,7 @@ class MCPServer {
 		$arguments = [];
 		foreach($template['properties'] as $property) {
 			$name = $property['name'];
-			if(array_key_exists($name, $matches)) {
-				$arguments[$name] = $matches[$name];
-			} elseif(property_exists($requestArguments, $name)) {
-				$arguments[$name] = $requestArguments->{$name};
-			} else {
-				$arguments[$name] = null;
-			}
+			$arguments[$name] = property_exists($requestArguments, $name) ? $requestArguments->{$name} : null;
 		}
 
 		return (object) $arguments;
@@ -531,7 +525,11 @@ class MCPServer {
 			}
 
 			/** @var iterable<MCPResource> $resources */
-			$resources = $handler((object) [], $requestArguments);
+			$resources = $handler(new ResourceRequest(
+				uri: $params->uri,
+				parameters: (object) [],
+				arguments: $requestArguments,
+			));
 
 			$result = [];
 			foreach($resources as $resource) {
@@ -556,10 +554,14 @@ class MCPServer {
 				$handler = $this->resourceHandler;
 			}
 
-			$arguments = $this->buildResourceTemplateArguments($template, $matches, $requestArguments);
+			$arguments = $this->buildResourceTemplateArguments($template, $requestArguments);
 
 			/** @var iterable<MCPResource> $resources */
-			$resources = $handler((object) $matches, $arguments);
+			$resources = $handler(new ResourceRequest(
+				uri: $params->uri,
+				parameters: (object) $matches,
+				arguments: $arguments,
+			));
 
 			$result = [];
 			foreach($resources as $resource) {
