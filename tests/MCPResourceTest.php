@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace McpSrv;
 
 use McpSrv\Common\CapturingResponseHandler;
+use McpSrv\Types\Resources\MCPResource;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -98,5 +99,47 @@ class MCPResourceTest extends TestCase {
 		$this->assertSame('string', $inputSchema['properties']['path']['type'] ?? null); // @phpstan-ignore-line
 		$this->assertArrayHasKey('format', $inputSchema['properties']);
 		$this->assertSame('string', $inputSchema['properties']['format']['type'] ?? null); // @phpstan-ignore-line
+	}
+
+	public function testResourceTemplateHandlerUsesParsedArguments(): void {
+		$handler = new CapturingResponseHandler();
+		$server = new MCPServer('test', $handler);
+		$seenArgs = null;
+
+		$server->registerResourceTemplate(
+			uriTemplate: 'file://{path}',
+			description: 'File template',
+			properties: [
+				['name' => 'path', 'type' => 'string', 'description' => 'path', 'required' => true],
+				['name' => 'format', 'type' => 'string', 'description' => 'format'],
+			],
+			handler: function(object $args) use (&$seenArgs): array {
+				$seenArgs = $args;
+				return [new MCPResource('ok', 'text/plain')];
+			}
+		);
+
+		$request = json_encode([
+			'method' => 'resources/read',
+			'id' => 13,
+			'params' => (object) [
+				'uri' => 'file://demo.txt',
+				'arguments' => (object) ['path' => 'ignored.txt', 'format' => 'text'],
+			],
+		], JSON_THROW_ON_ERROR);
+
+		$server->run($request);
+
+		$this->assertNull($handler->error);
+		$this->assertNotNull($handler->reply);
+		$this->assertNotNull($seenArgs);
+		$this->assertSame('file://demo.txt', $seenArgs->uri ?? null);
+		$this->assertSame('demo.txt', $seenArgs->arguments->path ?? null);
+		$this->assertSame('text', $seenArgs->arguments->format ?? null);
+
+		/** @var array{contents: array<int, MCPResource>} $result */
+		$result = $handler->reply['result'];
+		$this->assertArrayHasKey('contents', $result);
+		$this->assertCount(1, $result['contents']);
 	}
 }

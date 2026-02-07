@@ -49,14 +49,15 @@ use Throwable;
  *     inputSchema: TResourceInputSchema
  * }
  *
- * @phpstan-type TResourceHandler callable(object{uri: string, arguments: object}): Resource[]
+ * @phpstan-type TResourceHandler callable(object{uri: string, arguments: object}): iterable<MCPResource>
  *
  * @phpstan-type TResourceTemplateProperty array{type: string, name: string, description?: string, required?: bool}
  *
  * @phpstan-type TResourceTemplate array{
  *     uriTemplate: string,
  *     description?: string,
- *     properties: TResourceTemplateProperty[]
+ *     properties: TResourceTemplateProperty[],
+ *     handler: null|TResourceHandler
  * }
  */
 class MCPServer {
@@ -156,10 +157,10 @@ class MCPServer {
 	 * @param string $uriTemplate
 	 * @param string $description
 	 * @param TResourceTemplateProperty[] $properties
-	 * @param callable(object $arguments): iterable<Resource> $handler
+	 * @param null|TResourceHandler $handler
 	 * @return void
 	 */
-	public function registerResourceTemplate(string $uriTemplate, string $description, array $properties, callable $handler): void {
+	public function registerResourceTemplate(string $uriTemplate, string $description, array $properties, ?callable $handler = null): void {
 		$this->resourceTemplates[$uriTemplate] = [
 			'uriTemplate' => $uriTemplate,
 			'description' => $description,
@@ -441,6 +442,73 @@ class MCPServer {
 	}
 
 	/**
+	 * @param string $uriTemplate
+	 * @param string $uri
+	 * @return null|array<string, string>
+	 */
+	private function parseResourceTemplateUri(string $uriTemplate, string $uri): ?array {
+		$parts = preg_split(
+			'/(\{[a-zA-Z_][a-zA-Z0-9_]*\})/',
+			$uriTemplate,
+			-1,
+			PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY
+		);
+
+		if($parts === false) {
+			return null;
+		}
+
+		$pattern = '^';
+		foreach($parts as $part) {
+			if(preg_match('/^\{([a-zA-Z_][a-zA-Z0-9_]*)\}$/', $part, $match)) {
+				$pattern .= '(?P<' . $match[1] . '>[^/]+)';
+			} else {
+				$pattern .= preg_quote($part, '~');
+			}
+		}
+		$pattern .= '$';
+
+		if(!preg_match('~' . $pattern . '~', $uri, $matches)) {
+			return null;
+		}
+
+		$namedMatches = [];
+		foreach($matches as $key => $value) {
+			if(!is_int($key)) {
+				$namedMatches[$key] = $value;
+			}
+		}
+
+		return $namedMatches;
+	}
+
+	/**
+	 * @param TResourceTemplate $template
+	 * @param array<string, string> $matches
+	 * @param object $requestArguments
+	 * @return object
+	 */
+	private function buildResourceTemplateArguments(array $template, array $matches, object $requestArguments): object {
+		if(empty($template['properties'])) {
+			return $requestArguments;
+		}
+
+		$arguments = [];
+		foreach($template['properties'] as $property) {
+			$name = $property['name'];
+			if(array_key_exists($name, $matches)) {
+				$arguments[$name] = $matches[$name];
+			} elseif(property_exists($requestArguments, $name)) {
+				$arguments[$name] = $requestArguments->{$name};
+			} else {
+				$arguments[$name] = null;
+			}
+		}
+
+		return (object) $arguments;
+	}
+
+	/**
 	 * @param object $params
 	 * @return array{contents: MCPResource[]}
 	 * @throws MCPInvalidArgumentException
@@ -450,7 +518,7 @@ class MCPServer {
 			throw new MCPInvalidArgumentException('Missing or invalid resource uri', 100);
 		}
 
-		$arguments = property_exists($params, 'arguments') && is_object($params->arguments) ? $params->arguments : new \stdClass();
+		$requestArguments = property_exists($params, 'arguments') && is_object($params->arguments) ? $params->arguments : new \stdClass();
 
 		if(array_key_exists($params->uri, $this->resources)) {
 			if($this->resources[$params->uri]['handler'] === null) {
@@ -465,7 +533,7 @@ class MCPServer {
 			/** @var iterable<MCPResource> $resources */
 			$resources = $handler((object) [
 				'uri' => $params->uri,
-				'arguments' => $arguments,
+				'arguments' => $requestArguments,
 			]);
 
 			$result = [];
@@ -478,10 +546,20 @@ class MCPServer {
 		}
 
 		foreach($this->resourceTemplates as $template) {
-			if($this->resourceHandler === null) {
-				throw new MCPGeneralException('No resource handler registered', 500);
+			$matches = $this->parseResourceTemplateUri($template['uriTemplate'], $params->uri);
+			if($matches === null) {
+				continue;
 			}
-			$handler = $this->resourceHandler;
+
+			$handler = $template['handler'] ?? null;
+			if($handler === null) {
+				if($this->resourceHandler === null) {
+					throw new MCPGeneralException('No resource handler registered', 500);
+				}
+				$handler = $this->resourceHandler;
+			}
+
+			$arguments = $this->buildResourceTemplateArguments($template, $matches, $requestArguments);
 
 			/** @var iterable<MCPResource> $resources */
 			$resources = $handler((object) [
@@ -489,22 +567,13 @@ class MCPServer {
 				'arguments' => $arguments,
 			]);
 
-			$regex = sprintf('{%s}', preg_replace('{\{([a-zA-Z_][a-zA-Z0-9_]*)\}}', '(?<$1>[^/]+)', $template['uriTemplate']));
-
-			if(preg_match($regex, $params->uri, $matches)) {
-				$arguments = [];
-				foreach($template['properties'] as $property) {
-					$arguments[$property['name']] = $matches[$property['name']] ?? null;
-				}
-
-				$result = [];
-				foreach($resources as $resource) {
-					$resource->uri ??= $params->uri;
-					$result[] = $resource;
-				}
-
-				return ['contents' => $result];
+			$result = [];
+			foreach($resources as $resource) {
+				$resource->uri ??= $params->uri;
+				$result[] = $resource;
 			}
+
+			return ['contents' => $result];
 		}
 
 		throw new MCPInvalidArgumentException("Unknown resource: {$params->uri}", 100);
@@ -530,7 +599,7 @@ class MCPServer {
 				unset($property['name']);
 				$properties[$name] = $property;
 			}
-			unset($template['properties']);
+			unset($template['properties'], $template['handler']);
 			$template['inputSchema'] = [
 				'type' => 'object',
 				'properties' => $properties,
