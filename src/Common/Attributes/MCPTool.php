@@ -11,13 +11,14 @@ use Attribute;
 readonly class MCPTool {
 	/**
 	 * @param TJsonSchema|null $parametersSchema
-	 * @param TJsonSchema|null $returnSchema
+	 * @param TJsonSchema|null $annotations
+	 * @param TJsonSchema|null $outputSchema
 	 */
 	public function __construct(
 		public string $name,
 		public string $description,
 		public array|object|null $parametersSchema = null,
-		public array|object|null $returnSchema = null,
-		public bool $isDangerous = false,
+		public array|object|null $annotations = null,
+		public array|object|null $outputSchema = null,
 	) {}
 }

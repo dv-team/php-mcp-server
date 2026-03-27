@@ -66,7 +66,11 @@ class MCPListEndpointsTest extends TestCase {
 					new MCPToolString(name: 'text', description: 'text to echo', required: true)
 				)
 			),
-			isDangerous: false,
+			annotations: (object) [
+				'readOnlyHint' => true,
+				'idempotentHint' => true,
+				'openWorldHint' => false,
+			],
 			handler: static fn (object $input): MCPToolResult => new MCPToolResult(content: (object) ['echo' => $input->text ?? null], isError: false)
 		);
 
@@ -77,14 +81,16 @@ class MCPListEndpointsTest extends TestCase {
 		$this->assertNotNull($handler->reply);
 		$this->assertSame(22, $handler->reply['id']);
 		$this->assertIsObject($handler->reply['result']);
-		/** @var object{tools: list<object{name: string, description: string, isDangerous: bool, inputSchema: object{type: string, properties: array<string, mixed>|object, required?: list<string>}}>} $result */
+		/** @var object{tools: list<object{name: string, description: string, inputSchema: object{type: string, properties: array<string, mixed>|object, required?: list<string>}, annotations: object}>} $result */
 		$result = $handler->reply['result'];
 		$this->assertCount(1, $result->tools);
 		$tool = $result->tools[0];
 		$this->assertSame('echo_tool', $tool->name);
-		$this->assertFalse($tool->isDangerous);
 		$this->assertObjectHasProperty('inputSchema', $tool);
+		$this->assertObjectHasProperty('annotations', $tool);
 		$inputSchema = $tool->inputSchema;
+		/** @var object{readOnlyHint?: bool} $annotations */
+		$annotations = $tool->annotations;
 		$this->assertSame('object', $inputSchema->type);
 		$this->assertObjectHasProperty('properties', $inputSchema);
 		$this->assertIsObject($inputSchema->properties);
@@ -92,5 +98,6 @@ class MCPListEndpointsTest extends TestCase {
 		$this->assertObjectHasProperty('text', $properties);
 		$required = $inputSchema->required ?? [];
 		$this->assertContains('text', $required);
+		$this->assertTrue($annotations->readOnlyHint ?? false);
 	}
 }

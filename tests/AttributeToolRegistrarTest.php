@@ -30,7 +30,7 @@ class AttributeToolRegistrarTest extends TestCase {
 		$this->assertNotNull($handler->reply);
 		$this->assertSame(31, $handler->reply['id']);
 		$this->assertIsObject($handler->reply['result']);
-		/** @var object{tools: list<object{name: string, description: string, isDangerous: bool, inputSchema: object}>} $result */
+		/** @var object{tools: list<object{name: string, description: string, inputSchema: object, annotations: object, outputSchema: object}>} $result */
 		$result = $handler->reply['result'];
 		$this->assertCount(2, $result->tools);
 
@@ -43,7 +43,15 @@ class AttributeToolRegistrarTest extends TestCase {
 		$this->assertArrayHasKey('sum', $toolsByName);
 		$sum = $toolsByName['sum'];
 		$this->assertSame('Sum numbers', $sum->description);
-		$this->assertTrue($sum->isDangerous);
+		$this->assertObjectHasProperty('annotations', $sum);
+		$this->assertObjectHasProperty('outputSchema', $sum);
+		/** @var object{readOnlyHint?: bool} $sumAnnotations */
+		$sumAnnotations = $sum->annotations;
+		/** @var object{type: string, properties: object{sum: object}} $sumOutputSchema */
+		$sumOutputSchema = $sum->outputSchema;
+		$this->assertSame('object', $sumOutputSchema->type);
+		$this->assertObjectHasProperty('sum', $sumOutputSchema->properties);
+		$this->assertTrue($sumAnnotations->readOnlyHint ?? false);
 
 		/** @var object{type: string, properties: object{a: object, b: object}, required?: string[]} $sumSchema */
 		$sumSchema = $sum->inputSchema;
@@ -62,7 +70,15 @@ class AttributeToolRegistrarTest extends TestCase {
 
 		$this->assertArrayHasKey('echo', $toolsByName);
 		$echo = $toolsByName['echo'];
-		$this->assertFalse($echo->isDangerous);
+		$this->assertObjectHasProperty('annotations', $echo);
+		$this->assertObjectHasProperty('outputSchema', $echo);
+		/** @var object{readOnlyHint?: bool} $echoAnnotations */
+		$echoAnnotations = $echo->annotations;
+		/** @var object{type: string, properties: object{value: object}} $echoOutputSchema */
+		$echoOutputSchema = $echo->outputSchema;
+		$this->assertSame('object', $echoOutputSchema->type);
+		$this->assertObjectHasProperty('value', $echoOutputSchema->properties);
+		$this->assertTrue($echoAnnotations->readOnlyHint ?? false);
 
 		/** @var object{type: string, properties: object{message: object}, required?: string[]} $echoSchema */
 		$echoSchema = $echo->inputSchema;

@@ -21,15 +21,15 @@ use ReflectionParameter;
  * @internal Use {@see MCPServer} instead.
  */
 class AttributeToolRegistrar {
-	public static function registerObject(object $toolCollection, MCPServer $server, bool $isDangerous = false): void {
+	public static function registerObject(object $toolCollection, MCPServer $server): void {
 		$reflection = new ReflectionClass($toolCollection);
 
 		foreach($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-			self::registerMethod($toolCollection, $method, $server, $isDangerous);
+			self::registerMethod($toolCollection, $method, $server);
 		}
 	}
 
-	public static function registerMethod(object $toolCollection, ReflectionMethod $method, MCPServer $server, bool $isDangerous = false): void {
+	public static function registerMethod(object $toolCollection, ReflectionMethod $method, MCPServer $server): void {
 		$attributes = $method->getAttributes(MCPToolAttribute::class);
 
 		if(!count($attributes)) {
@@ -45,15 +45,15 @@ class AttributeToolRegistrar {
 			name: $toolAttribute->name,
 			description: $toolAttribute->description,
 			inputSchema: $inputSchema,
-			isDangerous: $isDangerous || $toolAttribute->isDangerous,
 			handler: static function(object $arguments) use ($toolCollection, $method): MCPToolResult {
 				return self::invokeTool($toolCollection, $method, $arguments);
 			},
-			returnSchema: $toolAttribute->returnSchema === null ? null : (object) $toolAttribute->returnSchema
+			annotations: $toolAttribute->annotations === null ? null : self::normalizeJsonSchemaObject($toolAttribute->annotations),
+			returnSchema: $toolAttribute->outputSchema === null ? null : self::normalizeJsonSchemaObject($toolAttribute->outputSchema)
 		);
 	}
 
-	public static function registerFn(callable $callable, MCPServer $server, bool $isDangerous = false): void {
+	public static function registerFn(callable $callable, MCPServer $server): void {
 		$reflection = new ReflectionFunction(Closure::fromCallable($callable));
 		$object = $reflection->getClosureThis();
 		$scopeClass = $reflection->getClosureScopeClass();
@@ -64,7 +64,7 @@ class AttributeToolRegistrar {
 
 		$method = $scopeClass->getMethod($reflection->getName());
 
-		self::registerMethod($object, $method, $server, $isDangerous);
+		self::registerMethod($object, $method, $server);
 	}
 
 	/**
@@ -161,6 +161,49 @@ class AttributeToolRegistrar {
 			properties: new MCPToolProperties(...$propertyObjects),
 			required: $requiredList,
 		);
+	}
+
+	/**
+	 * @param array<array-key, mixed>|object $schema
+	 */
+	private static function normalizeJsonSchemaObject(array|object $schema): object {
+		$normalized = self::normalizeJsonSchema($schema);
+
+		return is_object($normalized) ? $normalized : (object) $normalized;
+	}
+
+	/**
+	 * @param array<array-key, mixed>|object $schema
+	 * @return object|array<array-key, mixed>
+	 */
+	private static function normalizeJsonSchema(array|object $schema): object|array {
+		if(is_object($schema)) {
+			$normalized = [];
+			foreach(get_object_vars($schema) as $key => $value) {
+				$normalized[$key] = self::normalizeJsonSchemaValue($value);
+			}
+
+			return (object) $normalized;
+		}
+
+		if(array_is_list($schema)) {
+			return array_map(self::normalizeJsonSchemaValue(...), $schema);
+		}
+
+		$normalized = [];
+		foreach($schema as $key => $value) {
+			$normalized[$key] = self::normalizeJsonSchemaValue($value);
+		}
+
+		return (object) $normalized;
+	}
+
+	private static function normalizeJsonSchemaValue(mixed $value): mixed {
+		if(is_array($value) || is_object($value)) {
+			return self::normalizeJsonSchema($value);
+		}
+
+		return $value;
 	}
 
 	/**

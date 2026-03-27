@@ -17,8 +17,18 @@ class AttributeToolRegistrarFixture {
 		name: 'sum',
 		description: 'Sum numbers',
 		parametersSchema: ['properties' => []],
-		returnSchema: [],
-		isDangerous: true
+		annotations: [
+			'readOnlyHint' => true,
+			'idempotentHint' => true,
+			'openWorldHint' => false,
+		],
+		outputSchema: [
+			'type' => 'object',
+			'properties' => [
+				'sum' => ['type' => 'integer'],
+			],
+			'required' => ['sum'],
+		]
 	)]
 	public function sum(
 		#[MCPDescription('First number')] int $a,
@@ -36,7 +46,18 @@ class AttributeToolRegistrarFixture {
 			],
 			'required' => ['message'],
 		],
-		returnSchema: []
+		annotations: [
+			'readOnlyHint' => true,
+			'idempotentHint' => true,
+			'openWorldHint' => false,
+		],
+		outputSchema: [
+			'type' => 'object',
+			'properties' => [
+				'value' => ['type' => 'string'],
+			],
+			'required' => ['value'],
+		]
 	)]
 	public function echoMessage(
 		#[MCPDescription('Message')] string $message = 'default',

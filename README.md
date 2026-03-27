@@ -133,7 +133,11 @@ $server->registerTool(
 			new MCPToolString(name: 'text', description: 'Text to echo', required: true),
 		)
 	),
-	isDangerous: false,
+	annotations: (object) [
+		'readOnlyHint' => true,
+		'idempotentHint' => true,
+		'openWorldHint' => false,
+	],
 	handler: static function (object $input): MCPToolResult {
 		return new MCPToolResult(
 			content: (object) ['echo' => (string) ($input->text ?? '')],
@@ -151,7 +155,11 @@ $server->registerTool(
 			new MCPToolInteger(name: 'b', description: 'Second addend', required: true),
 		)
 	),
-	isDangerous: false,
+	annotations: (object) [
+		'readOnlyHint' => true,
+		'idempotentHint' => true,
+		'openWorldHint' => false,
+	],
 	handler: static function (object $input): MCPToolResult {
 		$sum = (int) ($input->a ?? 0) + (int) ($input->b ?? 0);
 
@@ -175,7 +183,10 @@ $server->registerTool(
 		),
 		required: []
 	),
-	isDangerous: true,
+	annotations: (object) [
+		'destructiveHint' => false,
+		'openWorldHint' => true,
+	],
 	handler: static function (object $input): MCPToolResult {
 		$json = json_encode($input, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 		error_log($json);
@@ -206,7 +217,12 @@ class MathTools {
 			'type' => 'object',
 			'properties' => [], // left empty; types/required flags are inferred from parameter signatures
 		],
-		returnSchema: [
+		annotations: [
+			'readOnlyHint' => true,
+			'idempotentHint' => true,
+			'openWorldHint' => false,
+		],
+		outputSchema: [
 			'type' => 'object',
 			'properties' => [
 				'sum' => ['type' => 'integer', 'description' => 'Result of the addition', 'required' => true],

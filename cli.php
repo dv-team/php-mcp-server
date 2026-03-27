@@ -27,8 +27,11 @@ $server->registerTool(
 	name: 'tell_date_and_time',
 	description: 'Tells the current ISO 8601',
 	inputSchema: new MCPToolInputSchema(new MCPToolProperties(), required: []),
-	isDangerous: false,
-	handler: fn(object $args): MCPToolResult => new MCPToolResult(content: ['current_iso8601' => (new DateTimeImmutable())->format('c')], isError: false)
+	handler: fn(object $args): MCPToolResult => new MCPToolResult(content: ['current_iso8601' => (new DateTimeImmutable())->format('c')], isError: false),
+	annotations: (object) [
+		'readOnlyHint' => true,
+		'openWorldHint' => false,
+	]
 );
 
 $server->runCli(STDIN, loop: false);

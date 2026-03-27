@@ -17,12 +17,15 @@ class MCPBaseTools {
 			name: 'current_date_and_time',
 			description: 'Get the current date and time and timezone',
 			inputSchema: new MCPToolInputSchema(new MCPToolProperties()),
-			isDangerous: false,
 			handler: static function() {
 				$dt = (new DateTimeImmutable())->format('c');
 
 				return new MCPToolResult(content: ['current_date_and_time' => $dt], isError: false);
-			}
+			},
+			annotations: (object) [
+				'readOnlyHint' => true,
+				'openWorldHint' => false,
+			]
 		);
 
 		$server->registerTool(
@@ -33,7 +36,6 @@ class MCPBaseTools {
 					new MCPToolString(name: 'class_name', description: 'A single class name to get the file name for', required: true),
 				)
 			),
-			isDangerous: false,
 			handler: static function(object $args) {
 				/** @var object{class_name: class-string} $args */
 				try {
@@ -47,7 +49,12 @@ class MCPBaseTools {
 				} catch(Throwable $e) {
 					return new MCPToolResult(content: ['message' => $e->getMessage()], isError: true);
 				}
-			}
+			},
+			annotations: (object) [
+				'readOnlyHint' => true,
+				'idempotentHint' => true,
+				'openWorldHint' => false,
+			]
 		);
 	}
 }

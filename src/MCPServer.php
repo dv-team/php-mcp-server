@@ -182,25 +182,25 @@ class MCPServer {
 	 * @param string $name
 	 * @param string $description
 	 * @param MCPToolInputSchemaInterface $inputSchema
-	 * @param bool $isDangerous
 	 * @param callable(object): MCPToolResult $handler
+	 * @param null|object $annotations
 	 * @param null|object $returnSchema
 	 */
 	public function registerTool(
 		string $name,
 		string $description,
 		MCPToolInputSchemaInterface $inputSchema,
-		bool $isDangerous,
 		$handler,
+		?object $annotations = null,
 		?object $returnSchema = null,
 	): void {
 		$this->tools[$name] = new MCPTool(
 			name: $name,
 			description: $description,
 			arguments: $inputSchema,
-			isDangerous: $isDangerous,
 			handler: $handler,
-			returnSchema: $returnSchema
+			annotations: $annotations,
+			outputSchema: $returnSchema
 		);
 	}
 
@@ -616,7 +616,7 @@ class MCPServer {
 
 	/**
 	 * @param object $params
-	 * @return object{tools: array<object{name: string, description: string, isDangerous: bool, inputSchema?: object, returnSchema?: object}>}
+	 * @return object{tools: array<object{name: string, description: string, inputSchema?: object, annotations?: object, outputSchema?: object}>}
 	 */
 	private function listTools(object $params): object {
 		$tools = [];
