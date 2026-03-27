@@ -2,6 +2,7 @@
 
 namespace McpSrv;
 
+use DateTimeImmutable;
 use McpSrv\Common\Properties\MCPToolString;
 use McpSrv\Types\Tools\MCPToolInputSchema;
 use McpSrv\Types\Tools\MCPToolProperties;
@@ -12,6 +13,18 @@ use Throwable;
 
 class MCPBaseTools {
 	public static function register(MCPServer $server): void {
+		$server->registerTool(
+			name: 'current_date_and_time',
+			description: 'Get the current date and time and timezone',
+			inputSchema: new MCPToolInputSchema(new MCPToolProperties()),
+			isDangerous: false,
+			handler: static function() {
+				$dt = (new DateTimeImmutable())->format('c');
+
+				return new MCPToolResult(content: ['current_date_and_time' => $dt], isError: false);
+			}
+		);
+
 		$server->registerTool(
 			name: 'find_class_file',
 			description: 'Find the relative file path by the name of the fully qualified class name',
@@ -29,8 +42,9 @@ class MCPBaseTools {
 					if(!is_string($filename)) {
 						throw new RuntimeException("Could not get filename for class {$args->class_name}");
 					}
+
 					return new MCPToolResult(content: ['path' => $filename], isError: false);
-				} catch (Throwable $e) {
+				} catch(Throwable $e) {
 					return new MCPToolResult(content: ['message' => $e->getMessage()], isError: true);
 				}
 			}
