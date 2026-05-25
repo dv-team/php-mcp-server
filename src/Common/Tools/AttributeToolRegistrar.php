@@ -49,7 +49,7 @@ class AttributeToolRegistrar {
 				return self::invokeTool($toolCollection, $method, $arguments);
 			},
 			annotations: $toolAttribute->annotations === null ? null : self::normalizeJsonSchemaObject($toolAttribute->annotations),
-			returnSchema: $toolAttribute->outputSchema === null ? null : self::normalizeJsonSchemaObject($toolAttribute->outputSchema)
+			outputSchema: $toolAttribute->outputSchema === null ? null : self::normalizeJsonSchemaObject($toolAttribute->outputSchema)
 		);
 	}
 

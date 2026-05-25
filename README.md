@@ -248,6 +248,24 @@ $registrar->register(new MathTools(), $server);
 
 Descriptions on parameters are copied into the generated schema; when a property is not supplied in `parametersSchema`, the registrar infers the JSON Schema `type` and required flag from the method signature.
 
+## Tool Annotations
+
+Tools may carry an optional `annotations` object whose properties are **hints** about the tool's behavior. The MCP spec defines the keys below; all are optional. Clients use them to render UI hints (e.g. a "destructive" badge) or to decide which tools to expose without user confirmation.
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `title` | string | Human-readable title for the tool. |
+| `readOnlyHint` | bool | If true, the tool does not modify its environment. Default: `false`. |
+| `destructiveHint` | bool | If true, the tool may perform destructive updates. Only meaningful when `readOnlyHint == false`. Default: `true`. |
+| `idempotentHint` | bool | If true, repeated calls with the same arguments have no additional effect. Only meaningful when `readOnlyHint == false`. Default: `false`. |
+| `openWorldHint` | bool | If true, the tool may interact with an open world of external entities (e.g. web search). If false, its domain is closed (e.g. an in-memory tool). Default: `true`. |
+
+Annotations are hints, not guarantees — never make trust decisions based on annotations received from an untrusted server. See the [MCP specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) for the canonical definition.
+
+Pass annotations as a `stdClass` to `MCPServer::registerTool()` (cast an array with `(object) [...]` as shown in the examples) or as an associative array to `#[MCPTool]`. `registerTool()` also accepts an optional `outputSchema` parameter — a JSON-Schema object describing the tool's structured result — which is forwarded to the client alongside `inputSchema`.
+
+The shipped JSON schema at `schema/2025-11-25/schema.json` is used by the test suite to validate that registered tools conform to the spec, annotations included.
+
 ## Notes
 
 - This server is intended for environments where immediate responses are required (no streaming support).

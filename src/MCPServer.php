@@ -184,7 +184,7 @@ class MCPServer {
 	 * @param MCPToolInputSchemaInterface $inputSchema
 	 * @param callable(object): MCPToolResult $handler
 	 * @param null|object $annotations
-	 * @param null|object $returnSchema
+	 * @param null|object $outputSchema
 	 */
 	public function registerTool(
 		string $name,
@@ -192,7 +192,7 @@ class MCPServer {
 		MCPToolInputSchemaInterface $inputSchema,
 		$handler,
 		?object $annotations = null,
-		?object $returnSchema = null,
+		?object $outputSchema = null,
 	): void {
 		$this->tools[$name] = new MCPTool(
 			name: $name,
@@ -200,7 +200,7 @@ class MCPServer {
 			arguments: $inputSchema,
 			handler: $handler,
 			annotations: $annotations,
-			outputSchema: $returnSchema
+			outputSchema: $outputSchema
 		);
 	}
 
