@@ -34,4 +34,4 @@ $server->registerTool(
 	]
 );
 
-$server->runCli(STDIN, loop: false);
+$server->runCli(STDIN);

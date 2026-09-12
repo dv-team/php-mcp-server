@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace McpSrv;
 
 use McpSrv\Common\CapturingResponseHandler;
+use McpSrv\Common\Request;
 use McpSrv\Common\PromptResult\RoleEnum;
 use McpSrv\Common\Properties\MCPToolString;
 use McpSrv\Types\Prompts\MCPPromptArgument;
@@ -33,7 +34,7 @@ class MCPListEndpointsTest extends TestCase {
 			)
 		);
 
-		$request = json_encode(['method' => 'prompts/list', 'id' => 21, 'params' => (object) []], JSON_THROW_ON_ERROR);
+		$request = Request::encode(['method' => 'prompts/list', 'id' => 21, 'params' => (object) []]);
 
 		$server->run($request);
 
@@ -66,15 +67,15 @@ class MCPListEndpointsTest extends TestCase {
 					new MCPToolString(name: 'text', description: 'text to echo', required: true)
 				)
 			),
+			handler: static fn (object $input): MCPToolResult => new MCPToolResult(content: (object) ['echo' => $input->text ?? null], isError: false),
 			annotations: (object) [
 				'readOnlyHint' => true,
 				'idempotentHint' => true,
 				'openWorldHint' => false,
-			],
-			handler: static fn (object $input): MCPToolResult => new MCPToolResult(content: (object) ['echo' => $input->text ?? null], isError: false)
+			]
 		);
 
-		$request = json_encode(['method' => 'tools/list', 'id' => 22, 'params' => (object) []], JSON_THROW_ON_ERROR);
+		$request = Request::encode(['method' => 'tools/list', 'id' => 22, 'params' => (object) []]);
 
 		$server->run($request);
 

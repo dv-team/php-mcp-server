@@ -3,6 +3,7 @@
 namespace McpSrv;
 
 use JsonException;
+use McpSrv\Common\HttpRequest;
 use McpSrv\Common\MCPException;
 use McpSrv\Common\MCPGeneralException;
 use McpSrv\Common\MCPInvalidArgumentException;
@@ -62,7 +63,7 @@ use Throwable;
  * }
  */
 class MCPServer {
-	private const SUPPORTED_PROTOCOL_VERSIONS = [/*'2025-03-26', */'2025-06-18', '2025-11-25'];
+	private const SUPPORTED_PROTOCOL_VERSIONS = ['2026-07-28'];
 
 	/** @var array<string, MCPPrompt> */
 	private array $prompts = [];
@@ -240,128 +241,161 @@ class MCPServer {
 	}
 
 	public function run(string $input): void {
-		if(trim($input) === '') {
-			$this->responseHandler->replyError(0, 'Empty input body', 100);
-
-			return;
-		}
-
-		try {
-			/** @var object{method: string, id: int|string, params?: object}&stdClass $body */
-			$body = json_decode($input, associative: false, flags: JSON_THROW_ON_ERROR);
-			$body->params ??= new stdClass();
-		} catch(JsonException) {
-			$this->responseHandler->replyError(0, 'Failed to parse request body', 100);
-
-			return;
-		}
-
-		try {
-			$method = $body->method ?? null;
-
-			if($method === null) {
-				throw new MCPInvalidArgumentException('Missing method', 100);
-			}
-
-			$result = [];
-			$extraResult = [];
-
-			if($method === 'initialize') {
-				$params = property_exists($body, 'params') ? $body->params : null;
-				if(!is_object($params)) {
-					$params = (object) [];
-				}
-				$result[] = $this->initialize($params);
-			} elseif($method === 'notifications/initialized') {
-				if(PHP_SAPI !== 'cli') {
-					http_response_code(202);
-				}
-			} elseif($method === 'prompts/list') {
-				$result[] = $this->listPrompts($body->params);
-				$extraResult[] = $this->finalize();
-			} elseif($method === 'prompts/get') {
-				$result[] = $this->getPrompt($body->params);
-				$extraResult[] = $this->finalize();
-			} elseif($method === 'resources/list') {
-				$result[] = $this->listResources($body->params);
-				$extraResult[] = $this->finalize();
-			} elseif($method === 'resources/read') {
-				$result[] = $this->readResource($body->params);
-				$extraResult[] = $this->finalize();
-			} elseif($method === 'resources/templates/list') {
-				$result[] = $this->listResourceTemplates($body->params);
-				$extraResult[] = $this->finalize();
-			} elseif($method === 'tools/list') {
-				$result[] = $this->listTools($body->params);
-				$extraResult[] = $this->finalize();
-			} elseif($method === 'tools/call') {
-				$result[] = $this->callTool($body->params)->jsonSerialize();
-				$extraResult[] = $this->finalize();
-			} elseif(str_starts_with($method, 'notifications/')) {
-				// Do nothing, the server does not handle notifications
-			} else {
-				throw new MCPInvalidArgumentException('Invalid method', 100);
-			}
-
-			foreach($result as $item) {
-				$this->responseHandler->reply($body->id, $item);
-			}
-
-			foreach($extraResult as $item) {
-				#$this->responseHandler->replyRaw($item);
-			}
-		} catch(MCPException $e) {
-			$this->responseHandler->replyError($body->id, $e->getMessage(), $e->getCode() ?: 500, $e->getData());
-		} catch(Throwable $e) {
-			$this->responseHandler->replyError($body->id, "Internal server error: {$e->getMessage()}", 500);
-		}
+		$this->process($input);
 	}
 
 	/**
-	 * @return object{
-	 *     protocolVersion: string,
-	 *     serverInfo: object{name: string, version: string},
-	 *     capabilities: object{
-	 *         prompts?: object{listChanged?: bool},
-	 *         resources?: object{listChanged?: bool},
-	 *         tools?: object{listChanged?: bool},
-	 *         instructions?: string
-	 *     }
-	 * }
+	 * Serve one native PHP HTTP request. Use HttpResponseHandler for HTTP output.
+	 * An absent Origin is accepted; present origins must be explicitly allowed.
+	 * Authentication and authorization belong in the application's entrypoint.
+	 *
+	 * @param list<string> $allowedOrigins Exact origins, including scheme and port.
 	 */
-	private function initialize(object $params): object {
-		$protocolVersion = property_exists($params, 'protocolVersion') ? $params->protocolVersion : null;
-		if(!is_string($protocolVersion) || !in_array($protocolVersion, self::SUPPORTED_PROTOCOL_VERSIONS, true)) {
-			throw new MCPInvalidArgumentException(
-				'Unsupported protocol version',
-				-32602,
-				['supportedVersions' => self::SUPPORTED_PROTOCOL_VERSIONS]
-			);
+	public function runHttp(array $allowedOrigins = []): void {
+		$request = HttpRequest::fromGlobals();
+		$origin = $request->header('Origin');
+		if($origin !== null && !in_array($origin, $allowedOrigins, true)) {
+			http_response_code(403);
+			return;
 		}
+		if(($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+			http_response_code(405);
+			header('Allow: POST');
+			return;
+		}
+		$contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+		if(!is_string($contentType) || strtolower(trim(explode(';', $contentType, 2)[0])) !== 'application/json') {
+			http_response_code(415);
+			return;
+		}
+		$accepted = [];
+		foreach(explode(',', $request->header('Accept') ?? '') as $range) {
+			$parts = explode(';', strtolower(trim($range)));
+			$quality = 1.0;
+			foreach(array_slice($parts, 1) as $parameter) {
+				if(preg_match('/^q\s*=\s*([0-9.]+)$/', trim($parameter), $match)) {
+					$quality = (float) $match[1];
+				}
+			}
+			if($quality > 0) {
+				$accepted[] = trim($parts[0]);
+			}
+		}
+		if(!in_array('application/json', $accepted, true) || !in_array('text/event-stream', $accepted, true)) {
+			http_response_code(406);
+			return;
+		}
+		$input = file_get_contents('php://input');
+		if($input === false) {
+			http_response_code(400);
+			return;
+		}
+		$this->process($input, $request);
+	}
+
+	private function process(string $input, ?HttpRequest $http = null): void {
+		try {
+			$body = json_decode($input, associative: false, flags: JSON_THROW_ON_ERROR);
+		} catch(JsonException) {
+			$this->replyInvalidRequest('Failed to parse request body', -32700);
+			return;
+		}
+		if(!$body instanceof stdClass || ($body->jsonrpc ?? null) !== '2.0'
+			|| !isset($body->method) || !is_string($body->method)
+			|| (property_exists($body, 'id') && !is_int($body->id) && !is_string($body->id))
+			|| (property_exists($body, 'params') && !$body->params instanceof stdClass)) {
+			$this->replyInvalidRequest('Invalid JSON-RPC request', -32600);
+			return;
+		}
+		// Notifications never execute handlers and never receive JSON-RPC replies.
+		if(!property_exists($body, 'id')) {
+			if($http !== null) {
+				http_response_code(400); // No HTTP client notifications in this profile.
+			}
+			return;
+		}
+		/** @var int|string $id */
+		$id = $body->id;
+		$params = ($body->params ?? null) instanceof stdClass ? $body->params : new stdClass();
+		try {
+			$tool = is_string($params->name ?? null) ? ($this->tools[$params->name] ?? null) : null;
+			$http?->validate($body->method, $params, $body->method === 'tools/call' ? $tool?->arguments->jsonSerialize() : null);
+			if($body->method === 'initialize') {
+				throw new MCPInvalidArgumentException('initialize is not supported; use MCP 2026-07-28 and server/discover', -32601);
+			}
+			$this->validateMetadata($params);
+			$result = match($body->method) {
+				'server/discover' => $this->discover(),
+				'prompts/list' => $this->listPrompts($params),
+				'prompts/get' => $this->getPrompt($params),
+				'resources/list' => $this->listResources($params),
+				'resources/read' => $this->readResource($params),
+				'resources/templates/list' => $this->listResourceTemplates($params),
+				'tools/list' => $this->listTools($params),
+				'tools/call' => $this->callTool($params)->jsonSerialize(),
+				default => throw new MCPInvalidArgumentException('Method not found', -32601),
+			};
+			$fields = (array) $result;
+			$fields['resultType'] = 'complete';
+			$fields['_meta'] = (object) [
+				'io.modelcontextprotocol/serverInfo' => (object) ['name' => $this->name, 'version' => '1.0.0'],
+			];
+			$this->responseHandler->reply($id, is_array($result) ? $fields : (object) $fields);
+		} catch(MCPException $e) {
+			$code = $e->getCode();
+			if($code === 0 || $code === 100 || $code === 500) {
+				$code = $e instanceof MCPInvalidArgumentException ? -32602 : -32603;
+			}
+			$this->responseHandler->replyError($id, $e->getMessage(), $code, $e->getData());
+		} catch(Throwable $e) {
+			$this->logger?->error('Internal server error', ['exception' => $e]);
+			$this->responseHandler->replyError($id, 'Internal server error', -32603);
+		}
+	}
+
+	private function replyInvalidRequest(string $message, int $code): void {
+		// replyRaw preserves the existing interface while allowing the required null id.
+		$this->responseHandler->replyRaw([
+			'jsonrpc' => '2.0',
+			'id' => null,
+			'error' => ['code' => $code, 'message' => $message],
+		]);
+	}
+
+	private function validateMetadata(object $params): void {
+		$meta = $params->_meta ?? null;
+		if(!$meta instanceof stdClass
+			|| !is_string($meta->{'io.modelcontextprotocol/protocolVersion'} ?? null)
+			|| !($meta->{'io.modelcontextprotocol/clientCapabilities'} ?? null) instanceof stdClass) {
+			throw new MCPInvalidArgumentException('Required protocolVersion and clientCapabilities metadata is missing or invalid', -32602);
+		}
+		$version = $meta->{'io.modelcontextprotocol/protocolVersion'};
+		if(!in_array($version, self::SUPPORTED_PROTOCOL_VERSIONS, true)) {
+			throw new MCPInvalidArgumentException('Unsupported protocol version', -32022, [
+				'supported' => self::SUPPORTED_PROTOCOL_VERSIONS,
+				'requested' => $version,
+			]);
+		}
+	}
+
+	private function discover(): object {
 		$capabilities = [];
-
 		if(count($this->prompts)) {
-			$capabilities['prompts'] = (object) ['list' => (object) [], 'get' => (object) []]; // 'listChanged' => true
+			$capabilities['prompts'] = (object) [];
 		}
-
-		if(count($this->resources)) {
-			$capabilities['resources'] = (object) ['list' => (object) [], 'read' => (object) []]; // 'listChanged' => true
+		if(count($this->resources) || count($this->resourceTemplates) || $this->resourceHandler !== null) {
+			$capabilities['resources'] = (object) [];
 		}
-
 		if(count($this->tools)) {
-			$capabilities['tools'] = (object) ['list' => (object) [], 'call' => (object) []]; // 'listChanged' => true
+			$capabilities['tools'] = (object) [];
 		}
-
 		$result = [
-			'protocolVersion' => $protocolVersion,
-			'serverInfo' => (object) ['name' => $this->name, 'version' => '1.0.0'],
+			'supportedVersions' => self::SUPPORTED_PROTOCOL_VERSIONS,
 			'capabilities' => (object) $capabilities,
 		];
-
 		if($this->instructions !== null) {
 			$result['instructions'] = $this->instructions;
 		}
-
 		return (object) $result;
 	}
 
@@ -373,7 +407,9 @@ class MCPServer {
 	 */
 	private function listPrompts(object $params): array {
 		$prompts = [];
-		foreach($this->prompts as $name => $prompt) {
+		$registered = $this->prompts;
+		ksort($registered, SORT_STRING);
+		foreach($registered as $name => $prompt) {
 			$arguments = [];
 			foreach($prompt->arguments as $arg) {
 				$arguments[] = [
@@ -418,7 +454,9 @@ class MCPServer {
 	 */
 	private function listResources(object $params): array {
 		$resources = [];
-		foreach($this->resources as $resource) {
+		$registered = $this->resources;
+		ksort($registered, SORT_STRING);
+		foreach($registered as $resource) {
 			$entry = [
 				'name' => $resource['name'],
 				'uri' => $resource['uri'],
@@ -581,7 +619,9 @@ class MCPServer {
 	 */
 	private function listResourceTemplates(object $params): array {
 		$templates = [];
-		foreach($this->resourceTemplates as $template) {
+		$registered = $this->resourceTemplates;
+		ksort($registered, SORT_STRING);
+		foreach($registered as $template) {
 			$properties = [];
 			$required = [];
 			foreach($template['properties'] as $property) {
@@ -596,6 +636,7 @@ class MCPServer {
 				$properties[$name] = $property;
 			}
 			unset($template['properties'], $template['handler']);
+			$template['name'] = $template['uriTemplate'];
 			$template['inputSchema'] = [
 				'type' => 'object',
 				'properties' => $properties,
@@ -620,7 +661,9 @@ class MCPServer {
 	 */
 	private function listTools(object $params): object {
 		$tools = [];
-		foreach($this->tools as $tool) {
+		$registered = $this->tools;
+		ksort($registered, SORT_STRING);
+		foreach($registered as $tool) {
 			$tools[] = $tool->jsonSerialize();
 		}
 
@@ -637,7 +680,8 @@ class MCPServer {
 			throw new MCPInvalidArgumentException('Missing or invalid tool name', 100);
 		}
 
-		if(!property_exists($params, 'arguments') || !is_object($params->arguments)) {
+		$arguments = property_exists($params, 'arguments') ? $params->arguments : new stdClass();
+		if(!is_object($arguments)) {
 			throw new MCPInvalidArgumentException('Tool call must include arguments object', 100);
 		}
 
@@ -647,19 +691,7 @@ class MCPServer {
 		$tool = $this->tools[$params->name];
 		$handler = $tool->handler;
 
-		return $handler($params->arguments);
+		return $handler($arguments);
 	}
 
-	private function finalize(): object {
-		return (object) [
-			'jsonrpc' => '2.0',
-			'method' => '$/progress',
-			'params' => [
-				'token' => 0,
-				'value' => [
-					'kind' => 'end',
-				],
-			],
-		];
-	}
 }

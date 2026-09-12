@@ -3,8 +3,10 @@
 !/src
 !/src-http
 !/tests
+!/docs
 !/.gitignore
 !/cli.php
+!/http.php
 !/composer.json
 !/phpstan.neon
 !/phpunit.xml

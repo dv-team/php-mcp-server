@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace McpSrv;
 
 use McpSrv\Common\CapturingResponseHandler;
+use McpSrv\Common\Request;
 use McpSrv\Common\Resources\ResourceRequest;
 use McpSrv\Types\Resources\MCPResource;
 use PHPUnit\Framework\TestCase;
@@ -28,11 +29,11 @@ class MCPResourceTest extends TestCase {
 			required: ['path']
 		);
 
-		$request = json_encode([
+		$request = Request::encode([
 			'method' => 'resources/list',
 			'id' => 11,
 			'params' => (object) [],
-		], JSON_THROW_ON_ERROR);
+		]);
 
 		$server->run($request);
 
@@ -69,11 +70,11 @@ class MCPResourceTest extends TestCase {
 			handler: static fn (ResourceRequest $request): array => []
 		);
 
-		$request = json_encode([
+		$request = Request::encode([
 			'method' => 'resources/templates/list',
 			'id' => 12,
 			'params' => (object) [],
-		], JSON_THROW_ON_ERROR);
+		]);
 
 		$server->run($request);
 
@@ -120,14 +121,14 @@ class MCPResourceTest extends TestCase {
 			}
 		);
 
-		$request = json_encode([
+		$request = Request::encode([
 			'method' => 'resources/read',
 			'id' => 13,
 			'params' => (object) [
 				'uri' => 'file://demo.txt',
 				'arguments' => (object) ['path' => 'ignored.txt', 'format' => 'text'],
 			],
-		], JSON_THROW_ON_ERROR);
+		]);
 
 		$server->run($request);
 

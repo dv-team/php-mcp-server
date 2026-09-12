@@ -22,6 +22,10 @@ class CapturingResponseHandler implements ResponseHandlerInterface {
 		}
 	}
 
+	/** @var object|array<array-key, mixed>|null */
+	public object|array|null $raw = null;
+
 	public function replyRaw(object|array $result): void {
+		$this->raw = $result;
 	}
 }

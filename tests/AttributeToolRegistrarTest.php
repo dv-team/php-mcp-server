@@ -6,6 +6,7 @@ namespace McpSrv;
 
 use McpSrv\Common\AttributeToolRegistrarFixture;
 use McpSrv\Common\CapturingResponseHandler;
+use McpSrv\Common\Request;
 use McpSrv\Common\Tools\AttributeToolRegistrar;
 use JsonSchema\Constraints\Factory;
 use JsonSchema\SchemaStorage;
@@ -19,11 +20,11 @@ class AttributeToolRegistrarTest extends TestCase {
 
 		AttributeToolRegistrar::registerObject(new AttributeToolRegistrarFixture(), $server);
 
-		$request = json_encode([
+		$request = Request::encode([
 			'method' => 'tools/list',
 			'id' => 31,
 			'params' => (object) [],
-		], JSON_THROW_ON_ERROR);
+		]);
 
 		$server->run($request);
 
@@ -135,14 +136,14 @@ class AttributeToolRegistrarTest extends TestCase {
 
 		AttributeToolRegistrar::registerObject(new AttributeToolRegistrarFixture(), $server);
 
-		$request = json_encode([
+		$request = Request::encode([
 			'method' => 'tools/call',
 			'id' => 41,
 			'params' => (object) [
 				'name' => 'echo',
 				'arguments' => (object) [],
 			],
-		], JSON_THROW_ON_ERROR);
+		]);
 
 		$server->run($request);
 
@@ -159,21 +160,21 @@ class AttributeToolRegistrarTest extends TestCase {
 
 		AttributeToolRegistrar::registerObject(new AttributeToolRegistrarFixture(), $server);
 
-		$request = json_encode([
+		$request = Request::encode([
 			'method' => 'tools/call',
 			'id' => 42,
 			'params' => (object) [
 				'name' => 'sum',
 				'arguments' => (object) ['a' => 1],
 			],
-		], JSON_THROW_ON_ERROR);
+		]);
 
 		$server->run($request);
 
 		$this->assertNotNull($handler->error);
 		$this->assertSame(42, $handler->error['id']);
 		$this->assertSame("Missing required argument 'b'", $handler->error['message']);
-		$this->assertSame(100, $handler->error['code']);
+		$this->assertSame(-32602, $handler->error['code']);
 	}
 
 	public function testRegisterMethodRegistersSingleTool(): void {
@@ -183,11 +184,11 @@ class AttributeToolRegistrarTest extends TestCase {
 
 		AttributeToolRegistrar::registerMethod($fixture, new \ReflectionMethod($fixture, 'sum'), $server);
 
-		$request = json_encode([
+		$request = Request::encode([
 			'method' => 'tools/list',
 			'id' => 51,
 			'params' => (object) [],
-		], JSON_THROW_ON_ERROR);
+		]);
 
 		$server->run($request);
 
@@ -206,11 +207,11 @@ class AttributeToolRegistrarTest extends TestCase {
 
 		AttributeToolRegistrar::registerFn($fixture->echoMessage(...), $server);
 
-		$request = json_encode([
+		$request = Request::encode([
 			'method' => 'tools/list',
 			'id' => 52,
 			'params' => (object) [],
-		], JSON_THROW_ON_ERROR);
+		]);
 
 		$server->run($request);
 

@@ -1,3 +1,5 @@
+> Historical bridge: this directory predates the native MCP 2026-07-28 HTTP transport. Its examples are not compatible with the current PHP protocol core. Use `http.php` / `MCPServer::runHttp()` as described in the [project README](../README.md). This bridge has not been migrated or verified for 2026-07-28.
+
 # Streamable-HTTP MCP Bridge (Bun)
 
 Dieses Verzeichnis enthaelt einen schlanken Streamable-HTTP MCP Server auf Bun-Basis. Er bindet ein STDIO-MCP-CLI-Script an und stellt es via HTTP bereit. Die Antworten werden als Chunked HTTP (kein SSE) aus dem STDOUT des CLI gestreamt. SSL-Terminierung wird von einem vorgeschalteten Webserver erledigt und ist hier nicht enthalten.

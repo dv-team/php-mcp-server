@@ -2,85 +2,133 @@
 
 This project demonstrates a simple PHP-based MCP Server (JSON-RPC) for handling requests that can respond immediately. It is designed for flexibility and can be adapted to various environments, such as database schema retrieval, prompt output, filesystem tasks, and more.
 
-## High-Level Goals
+## Scope
 
-- **Simple PHP and PHP-esque MCP Server** for processes that can respond (near) immediately.
-- **STDIO sample** for quick testing; no streaming support.
-- **Versatile usage**: Suitable for a wide range of environments, including database, prompt handling, and filesystem operations.
+- Simple tools that finish immediately or after a short wait, plus prompts and resources.
+- Native PHP HTTP request/response handling and newline-delimited STDIO.
+- Exactly **MCP 2026-07-28** on both transports. Future versions require an explicit implementation update; a later date is not automatically accepted.
+- No dependency on `mcp/sdk`, no Node/Bun bridge, worker daemon, session store, or persistent connection required for native HTTP.
+- No subagents, background tasks, sampling, elicitation/user questions, progress streams, logging notifications, or ongoing list/resource change notifications. These features are neither advertised nor implemented.
 
-## Requirements
+Each HTTP request constructs the server and registers its tools again. Authenticate the caller before registration and execution. If application state spans calls, pass an explicit application identifier as a tool argument. Do not use MCP sessions or previous requests to establish client identity or permissions.
 
-- PHP 8.2 or higher
-- Composer
+## Requirements and installation
 
-## Installation
+PHP 8.2 or higher and Composer:
 
 ```bash
 composer install
 ```
 
+The only runtime package dependency is `psr/log`. Authentication providers, tool discovery and application schema validation belong to the integrating application. There is no dependency on `mcp/sdk`.
+
+## Compatibility and migration
+
+The existing PHP constructors, registration methods, attribute-based registration, callback arguments, result types, `run()`, `runCli()`, and `ResponseHandlerInterface` signatures remain unchanged. HTTP adds `HttpResponseHandler` and `MCPServer::runHttp()`.
+
+**The wire protocol changes are breaking for older MCP clients.** Clients must support `2026-07-28`; `initialize` is no longer supported. A client speaking only `2025-06-18` or `2025-11-25` cannot connect after this upgrade. Roll this release out together with client upgrades. Existing direct callers of `run()` must supply the new JSON-RPC envelope and metadata too.
+
+Supporting HTTP/OAuth alone does not establish client support for the new protocol lifecycle. Check the protocol version supported and enabled by each client before upgrading.
+
+Every request includes `params._meta` with:
+
+- `io.modelcontextprotocol/protocolVersion`: `2026-07-28`
+- `io.modelcontextprotocol/clientCapabilities`: an object, possibly `{}`
+- Optional `io.modelcontextprotocol/clientInfo`: client name and version
+
+Every successful response includes `resultType: "complete"` and server identity in `result._meta`. Protocol errors now use standard JSON-RPC/MCP codes. Malformed messages use `replyRaw()` to emit an error with `id: null`; custom response handlers must implement that existing method. List responses use deterministic ordering.
+
 ## Usage
 
 ### Implemented JSON-RPC methods
 
-- `initialize` (returns `protocolVersion: 2025-03-26`)
-- `notifications/initialized` (accepted; no response)
+- `server/discover`: supported versions, capabilities, server identity, and optional instructions
 - `prompts/list`, `prompts/get`
 - `tools/list`, `tools/call`
-- `resources/list`, `resources/read`
-- `resources/templates/list`
+- `resources/list`, `resources/read`, `resources/templates/list`
 
-### STDIO server (main)
+Discovery is optional for clients; tools can be called directly. Each request supplies its own metadata, including after a successful discovery call. Unsupported versions return error `-32022` with `data.supported` and `data.requested`. Unsupported methods return `-32601`.
 
-```bash
-printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"cli","version":"0.0"}}}' | php cli.php
-```
-
-Logs are written to `stdio–mcp.log` (note the filename contains an en dash `–`).
-
-### Streamable-HTTP via supergateway (optional)
-
-This server speaks STDIO only. If you need Streamable-HTTP, use the `supergateway` tool to bridge STDIO to HTTP while keeping the PHP server unchanged.
-
-Short example (stdio → Streamable-HTTP):
+### STDIO
 
 ```bash
-npx -y supergateway --stdio "php cli.php" --outputTransport streamableHttp --port 8000
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | php cli.php
 ```
 
-The Streamable-HTTP endpoint defaults to `http://localhost:8000/mcp`. See the [`supergateway` README](https://github.com/supercorp-ai/supergateway) for more options.
+The sample reads requests until EOF; the public `runCli($resource, $loop)` interface still supports single-request execution with `$loop = false`. Logs are written to `stdio–mcp.log` (the filename contains an en dash).
 
-### Streamable-HTTP bridge via `src-http` (Bun)
+### Native PHP HTTP
 
-If you prefer a Bun-based Streamable-HTTP bridge (chunked HTTP), use the project in `src-http/` to connect the PHP MCP CLI to an HTTP endpoint:
+Run the sample locally:
 
 ```bash
-cd src-http
-bun install
-MCP_CLI_CMD="php ../cli.php" bun run start
+php -S 127.0.0.1:8080 http.php
 ```
 
-The Bun server exposes `POST /mcp` and forwards each request to the PHP CLI over STDIO. Configure OAuth2 and other options via `.env` (see `src-http/.env.example`). OAuth is enforced by default; set `MCP_REQUIRE_AUTH=false` to disable.
-
-Optional tracing: set `MCP_CLI_TRACE_STDOUT=true` to echo MCP request/response lines to stdout.
-
-### Example servers
-
-The `examples/` folder is a separate Composer project. Install its dependencies first:
+Call the sample tool without a handshake:
 
 ```bash
-(cd examples && composer install)
+curl --fail-with-body http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/call' \
+  -H 'Mcp-Name: tell_date_and_time' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"tell_date_and_time","arguments":{},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
 
-STDIO sample that logs requests/responses to `examples/src/stdio–mcp.log`:
+For an application endpoint, use the same registration code with an HTTP response handler:
+
+```php
+use McpSrv\Common\Response\HttpResponseHandler;
+use McpSrv\MCPServer;
+
+$server = new MCPServer('My tools', new HttpResponseHandler());
+// Existing registerTool(), registerToolsFromObject(), registerPrompt(), etc.
+$server->runHttp(allowedOrigins: ['https://app.example.com']);
+```
+
+`runHttp()` reads `php://input` and native request headers. It returns one `application/json` response; SSE is not needed for this profile even though conforming clients advertise both accepted response types. Route the desired MCP endpoint to this script in Apache/nginx/PHP-FPM. The built-in development server is only a local example.
+
+HTTP behavior:
+
+- Only POST is supported; GET/DELETE return 405 with `Allow: POST`.
+- `MCP-Protocol-Version` and `Mcp-Method` are required. `Mcp-Name` is also required for `tools/call`, `prompts/get`, and `resources/read` (the resource URI).
+- Headers are checked against the body before invoking a handler. Recognized `x-mcp-header` tool parameters are checked too, including nested object properties and Base64-encoded values. Header failures return HTTP 400 / `-32020`.
+- Unsupported versions and malformed metadata return HTTP 400; unknown methods return HTTP 404 / `-32601`.
+- `Content-Type` must be `application/json`; Accept must include both `application/json` and `text/event-stream` with nonzero quality.
+- An absent Origin is accepted. A present Origin must match an entry in `allowedOrigins` exactly; the default empty list rejects all present origins with HTTP 403. Configure public origins explicitly behind a proxy. This is validation, not a CORS/preflight implementation.
+- No MCP session IDs are created, retained, or echoed. Responses are marked `Cache-Control: no-store`; no cache lifetime is promised for application-dependent lists.
+- HTTP client notifications are rejected with HTTP 400 and no body. STDIO notifications are ignored without a reply or handler invocation.
+
+The sample exposes only a clock tool and has no authentication. Integrate the application's authentication and authorization before registering/executing its tools, or at a trusted gateway. This library does not implement an OAuth authorization server.
+
+### Custom authentication and tool providers
+
+`AuthenticatedHttpServer` accepts an application-defined `HttpAuthenticationProviderInterface`. Its `authenticate(HttpRequest $request): object` method returns the application's identity/context or throws `HttpAuthenticationException` with its chosen HTTP rejection, headers and body. Only successful authentication invokes the factory that creates and registers the MCP server. The check runs on every request, including discovery, tool lists and tool calls.
+
+The library does not interpret credentials, maintain user accounts or implement identity-provider integrations. Login flows, OAuth metadata/endpoints, authorization policy and user mapping belong to the application. Frameworks can also authenticate in their own middleware and then call `runHttp()` directly. See [custom HTTP authentication](docs/http-authentication.md) for the small provider interface and entrypoint example.
+
+Tools continue to use the existing `registerTool()`, `registerToolFromMethod()` and `registerToolsFromObject()` methods. Applications can populate those registrations from any source. The MCP library handles their schemas and callbacks without knowing how tools were discovered or which application framework executes them.
+
+### Historical HTTP bridges
+
+`src-http/` contains the previous Bun bridge and its OAuth experiment. It is retained as historical code and is **not** the native `2026-07-28` HTTP implementation. Its old examples and third-party STDIO bridges require their own protocol review; use `http.php` / `runHttp()` for the implementation described here.
+
+### Verification
 
 ```bash
-printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"cli","version":"0.0"}}}' | php examples/src/prompts-and-tools-cli.php
+composer test
+composer phpstan
+python3 tests/http_smoke.py
+python3 tests/auth_http_smoke.py
 ```
+
+The HTTP checks start temporary PHP servers bound to loopback and terminate them afterwards. The authenticated check uses an application-defined test provider and verifies rejected requests, custom challenges, provider failures, per-request identities and ordinary tool registration/calls. It does not contact external services. Both scripts require Python 3 and permission to open a local socket. Never deploy `tests/Fixtures/`. In environments that prohibit PHPStan's parallel-worker socket, run `composer phpstan -- --debug` instead.
 
 ## Example: Registering Prompts
 
-The server uses YAML front-matter to parse Markdown files and register them as prompts, as shown in `examples/src/prompts-and-tools-cli.php`:
+The server uses YAML front-matter to parse Markdown files and register them as prompts, using an application-supplied YAML front-matter parser:
 
 ```php
 $files = [
@@ -242,8 +290,7 @@ class MathTools {
 
 $server = new MCPServer('attribute-sample', $responseHandler);
 
-$registrar = new AttributeToolRegistrar();
-$registrar->register(new MathTools(), $server);
+$server->registerToolsFromObject(new MathTools());
 ```
 
 Descriptions on parameters are copied into the generated schema; when a property is not supplied in `parametersSchema`, the registrar infers the JSON Schema `type` and required flag from the method signature.
@@ -268,8 +315,9 @@ The shipped JSON schema at `schema/2025-11-25/schema.json` is used by the test s
 
 ## Notes
 
-- This server is intended for environments where immediate responses are required (no streaming support).
-- For broader protocol coverage, including streaming, see [`logiscape/mcp-sdk-php`](https://github.com/logiscape/mcp-sdk-php).
+This is a synchronous request/response implementation. Existing schema builders and `MCPToolRawInputSchema` remain available; application callbacks remain responsible for validating their inputs and producing data matching any advertised output schema. The library does not fetch external schema URLs, infer application permissions or implement the optional interactive/background protocol features described above.
+
+Protocol references: [2026-07-28 changes](https://modelcontextprotocol.io/specification/2026-07-28/changelog), [versioning and compatibility](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning), [discovery](https://modelcontextprotocol.io/specification/2026-07-28/server/discover), and [Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http).
 
 ## License
 

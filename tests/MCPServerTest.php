@@ -22,9 +22,10 @@ class MCPServerTest extends TestCase {
 		$server->run('{');
 		
 		$this->assertNull($handler->reply, 'Expected no success reply');
-		$this->assertNotNull($handler->error);
-		$this->assertSame(0, $handler->error['id']);
-		$this->assertSame('Failed to parse request body', $handler->error['message']);
-		$this->assertSame(100, $handler->error['code']);
+		$this->assertSame([
+			'jsonrpc' => '2.0',
+			'id' => null,
+			'error' => ['code' => -32700, 'message' => 'Failed to parse request body'],
+		], $handler->raw);
 	}
 }
