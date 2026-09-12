@@ -6,6 +6,8 @@ namespace McpSrv;
 
 use McpSrv\Common\CapturingResponseHandler;
 use McpSrv\Common\Request;
+use McpSrv\Common\Resources\ResourceRequest;
+use McpSrv\Types\Resources\MCPResource;
 use McpSrv\Types\Tools\MCPToolInputSchema;
 use McpSrv\Types\Tools\MCPToolProperties;
 use McpSrv\Types\Tools\MCPToolResult;
@@ -30,11 +32,13 @@ class MCPProtocolTest extends TestCase {
 		self::assertSame('complete', $result['resultType']);
 		self::assertSame(false, $result['isError']);
 		self::assertArrayHasKey('_meta', $result);
+		self::assertArrayNotHasKey('ttlMs', $result);
+		self::assertArrayNotHasKey('cacheScope', $result);
 
 		$server->run(Request::encode(['id' => 'discover', 'method' => 'server/discover']));
 		self::assertNotNull($handler->reply);
 		$result = (array) $handler->reply['result'];
-		self::assertSame(['2026-07-28'], $result['supportedVersions']);
+		self::assertSame(['2026-07-28', '2025-11-25', '2025-06-18'], $result['supportedVersions']);
 		self::assertSame('Use simple tools.', $result['instructions']);
 		self::assertEquals((object) ['tools' => (object) []], $result['capabilities']);
 		self::assertEquals((object) ['io.modelcontextprotocol/serverInfo' => (object) ['name' => 'test', 'version' => '1.0.0']], $result['_meta']);
@@ -47,8 +51,34 @@ class MCPProtocolTest extends TestCase {
 	}
 
 	/** @return iterable<string, array{string}> */
+	public static function cacheableMethods(): iterable {
+		foreach(['server/discover', 'tools/list', 'prompts/list', 'resources/list', 'resources/templates/list', 'resources/read'] as $method) {
+			yield $method => [$method];
+		}
+	}
+
+	#[DataProvider('cacheableMethods')]
+	public function testCacheableResultsIncludeRequiredPrivateCacheHints(string $method): void {
+		$handler = new CapturingResponseHandler();
+		$server = new MCPServer('test', $handler);
+		$server->registerResource('test://example', 'Example', null,
+			static fn(ResourceRequest $request): array => [new MCPResource('example', 'text/plain')]);
+		$params = $method === 'resources/read' ? (object) ['uri' => 'test://example'] : (object) [];
+		$server->run(Request::encode(['id' => 1, 'method' => $method, 'params' => $params]));
+
+		self::assertNull($handler->error);
+		self::assertNotNull($handler->reply);
+		$result = (array) $handler->reply['result'];
+		self::assertSame('complete', $result['resultType']);
+		self::assertArrayHasKey('ttlMs', $result);
+		self::assertSame(0, $result['ttlMs']);
+		self::assertArrayHasKey('cacheScope', $result);
+		self::assertSame('private', $result['cacheScope']);
+	}
+
+	/** @return iterable<string, array{string}> */
 	public static function unsupportedVersions(): iterable {
-		foreach(['2025-03-26', '2025-06-18', '2025-11-25', '2099-01-01'] as $version) {
+		foreach(['2024-11-05', '2025-03-26', '2099-01-01'] as $version) {
 			yield $version => [$version];
 		}
 	}
@@ -61,7 +91,7 @@ class MCPProtocolTest extends TestCase {
 		$server->run($request);
 		self::assertNull($handler->reply);
 		self::assertSame(-32022, $handler->error['code'] ?? null);
-		self::assertSame(['supported' => ['2026-07-28'], 'requested' => $version], $handler->error['data'] ?? null);
+		self::assertSame(['supported' => ['2026-07-28', '2025-11-25', '2025-06-18'], 'requested' => $version], $handler->error['data'] ?? null);
 	}
 
 	/** @return iterable<string, array{string}> */

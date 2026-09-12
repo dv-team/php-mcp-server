@@ -52,7 +52,7 @@ $http->run(
 
 `$registerApplicationTools` is application code calling the existing tool registration methods. It may capture the identity in tool callbacks and register whatever the caller is allowed to use. The library neither discovers tools from external descriptions nor dispatches into an application framework itself.
 
-For each request the wrapper authenticates first, then invokes the factory and calls the returned server's `runHttp()`. Rejection prevents server construction, discovery, listing and execution. Nothing about a previous request grants access to a later one. Responses to authentication rejections use `Cache-Control: no-store` and retain the provider's status even when PHP would implicitly change it for `WWW-Authenticate`.
+For each request the wrapper authenticates first, then invokes the factory and calls the returned server's `runHttp()`. This applies to both the 2025 `initialize` lifecycle and 2026 `server/discover`, including notifications and tool calls. Rejection prevents server construction, initialization, discovery, listing and execution. Nothing about a previous request grants access to a later one, and no HTTP session is created. Responses to authentication rejections use `Cache-Control: no-store` and retain the provider's status even when PHP would implicitly change it for `WWW-Authenticate`.
 
 Unexpected exceptions from the provider propagate and never run the factory. Handle those failures with the application's normal error handling; do not catch them and continue with an unauthenticated server. Preserve authentication headers through the web server/proxy. Route any public authentication metadata separately from this protected MCP entrypoint.
 

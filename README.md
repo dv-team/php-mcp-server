@@ -6,7 +6,7 @@ This project demonstrates a simple PHP-based MCP Server (JSON-RPC) for handling 
 
 - Simple tools that finish immediately or after a short wait, plus prompts and resources.
 - Native PHP HTTP request/response handling and newline-delimited STDIO.
-- Exactly **MCP 2026-07-28** on both transports. Future versions require an explicit implementation update; a later date is not automatically accepted.
+- **MCP 2025-06-18, 2025-11-25 and 2026-07-28** on both transports. The server selects the protocol from client messages; no experimental client feature is required to use the 2025 versions.
 - No dependency on `mcp/sdk`, no Node/Bun bridge, worker daemon, session store, or persistent connection required for native HTTP.
 - No subagents, background tasks, sampling, elicitation/user questions, progress streams, logging notifications, or ongoing list/resource change notifications. These features are neither advertised nor implemented.
 
@@ -26,28 +26,33 @@ The only runtime package dependency is `psr/log`. Authentication providers, tool
 
 The existing PHP constructors, registration methods, attribute-based registration, callback arguments, result types, `run()`, `runCli()`, and `ResponseHandlerInterface` signatures remain unchanged. HTTP adds `HttpResponseHandler` and `MCPServer::runHttp()`.
 
-**The wire protocol changes are breaking for older MCP clients.** Clients must support `2026-07-28`; `initialize` is no longer supported. A client speaking only `2025-06-18` or `2025-11-25` cannot connect after this upgrade. Roll this release out together with client upgrades. Existing direct callers of `run()` must supply the new JSON-RPC envelope and metadata too.
+Clients using **2025-06-18 or 2025-11-25** start with `initialize`, supplying `protocolVersion`, `capabilities` and `clientInfo`. The server returns the requested supported version, server capabilities and `serverInfo`, plus optional instructions. An unsupported version proposed during initialization negotiates `2025-11-25`; the client must check that it supports the returned version. The client then sends `notifications/initialized` and uses ordinary `tools/list`, `tools/call`, prompt and resource requests. `ping` returns an empty result. No `resultType`, cache hints or modern per-request metadata are required for this lifecycle.
 
-Supporting HTTP/OAuth alone does not establish client support for the new protocol lifecycle. Check the protocol version supported and enabled by each client before upgrading.
+On STDIO, `initialize` establishes the legacy protocol version for that server instance. On HTTP, subsequent requests carry `MCP-Protocol-Version` so each PHP invocation can handle them independently; the server creates no session. An HTTP request without a version header defaults to `2025-03-26` as specified by MCP and is rejected as unsupported, except for the initial `initialize` request. Versions before 2025-06-18, JSON-RPC batches and the old HTTP+SSE transport are not supported.
 
-Every request includes `params._meta` with:
+Clients using **2026-07-28** can start with `server/discover` or call a tool directly. Every request includes `params._meta` with:
 
 - `io.modelcontextprotocol/protocolVersion`: `2026-07-28`
 - `io.modelcontextprotocol/clientCapabilities`: an object, possibly `{}`
 - Optional `io.modelcontextprotocol/clientInfo`: client name and version
 
-Every successful response includes `resultType: "complete"` and server identity in `result._meta`. Protocol errors now use standard JSON-RPC/MCP codes. Malformed messages use `replyRaw()` to emit an error with `id: null`; custom response handlers must implement that existing method. List responses use deterministic ordering.
+Every successful 2026 response includes `resultType: "complete"` and server identity in `result._meta`. Modern metadata is validated independently on every request, even when a legacy client has previously initialized the same server instance. A malformed modern request never falls back to legacy handling.
+
+For 2026 requests, discovery, all list results and resource reads also include the [required protocol caching hints](https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching): `ttlMs: 0` and `cacheScope: "private"`. Results are immediately stale and must not be shared across authorization contexts. These fields are required on STDIO as well as HTTP; HTTP cache headers do not replace them.
+
+Both lifecycles use standard JSON-RPC envelopes and error codes. Malformed messages use `replyRaw()` to emit an error with `id: null`; custom response handlers must implement that existing method. List responses use deterministic ordering. The same application registration methods and callbacks serve all supported versions.
 
 ## Usage
 
 ### Implemented JSON-RPC methods
 
-- `server/discover`: supported versions, capabilities, server identity, and optional instructions
+- `initialize`, `ping`: the 2025 lifecycle
+- `server/discover`: the 2026 lifecycle; supported versions, capabilities, server identity, and optional instructions
 - `prompts/list`, `prompts/get`
 - `tools/list`, `tools/call`
 - `resources/list`, `resources/read`, `resources/templates/list`
 
-Discovery is optional for clients; tools can be called directly. Each request supplies its own metadata, including after a successful discovery call. Unsupported versions return error `-32022` with `data.supported` and `data.requested`. Unsupported methods return `-32601`.
+Outside initialization, unsupported versions return error `-32022` with `data.supported` and `data.requested`. Unsupported methods return `-32601`. A future protocol date is not automatically accepted.
 
 ### STDIO
 
@@ -57,6 +62,16 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_me
 
 The sample reads requests until EOF; the public `runCli($resource, $loop)` interface still supports single-request execution with `$loop = false`. Logs are written to `stdio–mcp.log` (the filename contains an en dash).
 
+Codex needs only the ordinary MCP server configuration. For example, in the trusted project's `.codex/config.toml`:
+
+```toml
+[mcp_servers.test-mcp]
+command = "php"
+args = ["cli.php"]
+```
+
+Keep your existing command and arguments if you already have an application entrypoint. **Do not enable `mcp_2026_07_28` or set `CODEX_MCP_PROTOCOL_VERSION` for ordinary use.** If you added those experimental opt-ins for an earlier version of this library, remove them and restart Codex. Codex CLI 0.153.4 has been tested with the feature disabled, using its default 2025-06-18 handshake and real tool calls over both STDIO and HTTP. Clients that already use the 2026 protocol remain supported. Project configuration applies only to trusted projects. [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp)
+
 ### Native PHP HTTP
 
 Run the sample locally:
@@ -65,7 +80,14 @@ Run the sample locally:
 php -S 127.0.0.1:8080 http.php
 ```
 
-Call the sample tool without a handshake:
+Connect Codex to the HTTP endpoint with the normal URL configuration:
+
+```toml
+[mcp_servers.example-http]
+url = "http://127.0.0.1:8080/mcp"
+```
+
+Codex performs the 2025 handshake automatically. Configure authentication for an application endpoint separately. To exercise the 2026 wire format manually, call the sample tool without a handshake:
 
 ```bash
 curl --fail-with-body http://127.0.0.1:8080/mcp \
@@ -93,19 +115,19 @@ $server->runHttp(allowedOrigins: ['https://app.example.com']);
 HTTP behavior:
 
 - Only POST is supported; GET/DELETE return 405 with `Allow: POST`.
-- `MCP-Protocol-Version` and `Mcp-Method` are required. `Mcp-Name` is also required for `tools/call`, `prompts/get`, and `resources/read` (the resource URI).
-- Headers are checked against the body before invoking a handler. Recognized `x-mcp-header` tool parameters are checked too, including nested object properties and Base64-encoded values. Header failures return HTTP 400 / `-32020`.
+- For 2025 clients, `initialize` needs no protocol header; subsequent requests require `MCP-Protocol-Version`. `Mcp-Method`, `Mcp-Name`, `Mcp-Param-*` and modern `_meta` fields are not required.
+- For 2026 clients, `MCP-Protocol-Version` and `Mcp-Method` are required. `Mcp-Name` is also required for `tools/call`, `prompts/get`, and `resources/read` (the resource URI). Headers are checked against the body before invoking a handler. Recognized `x-mcp-header` tool parameters are checked too, including nested object properties and Base64-encoded values. Header failures return HTTP 400 / `-32020`.
 - Unsupported versions and malformed metadata return HTTP 400; unknown methods return HTTP 404 / `-32601`.
 - `Content-Type` must be `application/json`; Accept must include both `application/json` and `text/event-stream` with nonzero quality.
 - An absent Origin is accepted. A present Origin must match an entry in `allowedOrigins` exactly; the default empty list rejects all present origins with HTTP 403. Configure public origins explicitly behind a proxy. This is validation, not a CORS/preflight implementation.
-- No MCP session IDs are created, retained, or echoed. Responses are marked `Cache-Control: no-store`; no cache lifetime is promised for application-dependent lists.
-- HTTP client notifications are rejected with HTTP 400 and no body. STDIO notifications are ignored without a reply or handler invocation.
+- No MCP session IDs are created, retained, or echoed. Responses are marked `Cache-Control: no-store`; 2026 protocol caching hints also declare immediately stale, private results as described above.
+- For 2025 clients, `notifications/initialized` and `notifications/cancelled` return HTTP 202 with no body. Cancellation is acknowledged but does not interrupt synchronous work already running in another request. Other HTTP notifications, including 2026 notifications, return HTTP 400 with no body. STDIO notifications are ignored without a reply or handler invocation.
 
 The sample exposes only a clock tool and has no authentication. Integrate the application's authentication and authorization before registering/executing its tools, or at a trusted gateway. This library does not implement an OAuth authorization server.
 
 ### Custom authentication and tool providers
 
-`AuthenticatedHttpServer` accepts an application-defined `HttpAuthenticationProviderInterface`. Its `authenticate(HttpRequest $request): object` method returns the application's identity/context or throws `HttpAuthenticationException` with its chosen HTTP rejection, headers and body. Only successful authentication invokes the factory that creates and registers the MCP server. The check runs on every request, including discovery, tool lists and tool calls.
+`AuthenticatedHttpServer` accepts an application-defined `HttpAuthenticationProviderInterface`. Its `authenticate(HttpRequest $request): object` method returns the application's identity/context or throws `HttpAuthenticationException` with its chosen HTTP rejection, headers and body. Only successful authentication invokes the factory that creates and registers the MCP server. The check runs on every request, including initialization, notifications, discovery, tool lists and tool calls, for all supported protocol versions.
 
 The library does not interpret credentials, maintain user accounts or implement identity-provider integrations. Login flows, OAuth metadata/endpoints, authorization policy and user mapping belong to the application. Frameworks can also authenticate in their own middleware and then call `runHttp()` directly. See [custom HTTP authentication](docs/http-authentication.md) for the small provider interface and entrypoint example.
 
@@ -113,7 +135,7 @@ Tools continue to use the existing `registerTool()`, `registerToolFromMethod()` 
 
 ### Historical HTTP bridges
 
-`src-http/` contains the previous Bun bridge and its OAuth experiment. It is retained as historical code and is **not** the native `2026-07-28` HTTP implementation. Its old examples and third-party STDIO bridges require their own protocol review; use `http.php` / `runHttp()` for the implementation described here.
+`src-http/` contains the previous Bun bridge and its OAuth experiment. It is retained as historical code. Its old examples and third-party STDIO bridges require their own protocol review; use `http.php` / `runHttp()` for the native PHP implementation described here.
 
 ### Verification
 
@@ -124,7 +146,9 @@ python3 tests/http_smoke.py
 python3 tests/auth_http_smoke.py
 ```
 
-The HTTP checks start temporary PHP servers bound to loopback and terminate them afterwards. The authenticated check uses an application-defined test provider and verifies rejected requests, custom challenges, provider failures, per-request identities and ordinary tool registration/calls. It does not contact external services. Both scripts require Python 3 and permission to open a local socket. Never deploy `tests/Fixtures/`. In environments that prohibit PHPStan's parallel-worker socket, run `composer phpstan -- --debug` instead.
+The HTTP checks start temporary PHP servers bound to loopback and terminate them afterwards. They exercise both lifecycles, including fresh requests after initialization, header validation, notifications and tool calls. The authenticated check uses an application-defined test provider and verifies rejected requests, custom challenges, provider failures and per-request identities across the supported versions. It does not contact external services. Both scripts require Python 3 and permission to open a local socket. Never deploy `tests/Fixtures/`. In environments that prohibit PHPStan's parallel-worker socket, run `composer phpstan -- --debug` instead.
+
+The real Codex transport tests do not establish hosted Claude compatibility or verify an application's OAuth/Entra integration; those require separate end-to-end checks against the application endpoint.
 
 ## Example: Registering Prompts
 
@@ -317,7 +341,7 @@ The shipped JSON schema at `schema/2025-11-25/schema.json` is used by the test s
 
 This is a synchronous request/response implementation. Existing schema builders and `MCPToolRawInputSchema` remain available; application callbacks remain responsible for validating their inputs and producing data matching any advertised output schema. The library does not fetch external schema URLs, infer application permissions or implement the optional interactive/background protocol features described above.
 
-Protocol references: [2026-07-28 changes](https://modelcontextprotocol.io/specification/2026-07-28/changelog), [versioning and compatibility](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning), [discovery](https://modelcontextprotocol.io/specification/2026-07-28/server/discover), and [Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http).
+Protocol references: [2025 initialization](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle), [2025 Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), [2026-07-28 changes](https://modelcontextprotocol.io/specification/2026-07-28/changelog), [versioning and compatibility](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning), [discovery](https://modelcontextprotocol.io/specification/2026-07-28/server/discover), and [2026 Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http).
 
 ## License
 

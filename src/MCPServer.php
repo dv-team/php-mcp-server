@@ -63,7 +63,11 @@ use Throwable;
  * }
  */
 class MCPServer {
-	private const SUPPORTED_PROTOCOL_VERSIONS = ['2026-07-28'];
+	private const LEGACY_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18'];
+	private const SUPPORTED_PROTOCOL_VERSIONS = ['2026-07-28', ...self::LEGACY_PROTOCOL_VERSIONS];
+
+	/** Only the legacy STDIO wire format is retained; HTTP never uses this value. */
+	private ?string $legacyStdioVersion = null;
 
 	/** @var array<string, MCPPrompt> */
 	private array $prompts = [];
@@ -307,23 +311,36 @@ class MCPServer {
 			$this->replyInvalidRequest('Invalid JSON-RPC request', -32600);
 			return;
 		}
+		$params = ($body->params ?? null) instanceof stdClass ? $body->params : new stdClass();
 		// Notifications never execute handlers and never receive JSON-RPC replies.
 		if(!property_exists($body, 'id')) {
 			if($http !== null) {
-				http_response_code(400); // No HTTP client notifications in this profile.
+				$status = 400;
+				try {
+					$version = $this->requestVersion($body->method, $params, $http);
+					if($version !== '2026-07-28' && in_array($body->method, ['notifications/initialized', 'notifications/cancelled'], true)) {
+						$status = 202;
+					}
+				} catch(MCPException) {
+					// Invalid notifications get an HTTP error, never a JSON-RPC reply.
+				}
+				header('Cache-Control: no-store');
+				http_response_code($status);
 			}
 			return;
 		}
 		/** @var int|string $id */
 		$id = $body->id;
-		$params = ($body->params ?? null) instanceof stdClass ? $body->params : new stdClass();
 		try {
-			$tool = is_string($params->name ?? null) ? ($this->tools[$params->name] ?? null) : null;
-			$http?->validate($body->method, $params, $body->method === 'tools/call' ? $tool?->arguments->jsonSerialize() : null);
-			if($body->method === 'initialize') {
-				throw new MCPInvalidArgumentException('initialize is not supported; use MCP 2026-07-28 and server/discover', -32601);
+			$version = $this->requestVersion($body->method, $params, $http);
+			if($version !== '2026-07-28' && $body->method === 'initialize') {
+				$this->responseHandler->reply($id, $this->initialize($params, $http === null));
+				return;
 			}
-			$this->validateMetadata($params);
+			if($version !== '2026-07-28' && $body->method === 'ping') {
+				$this->responseHandler->reply($id, new stdClass());
+				return;
+			}
 			$result = match($body->method) {
 				'server/discover' => $this->discover(),
 				'prompts/list' => $this->listPrompts($params),
@@ -336,10 +353,17 @@ class MCPServer {
 				default => throw new MCPInvalidArgumentException('Method not found', -32601),
 			};
 			$fields = (array) $result;
-			$fields['resultType'] = 'complete';
-			$fields['_meta'] = (object) [
-				'io.modelcontextprotocol/serverInfo' => (object) ['name' => $this->name, 'version' => '1.0.0'],
-			];
+			if($version === '2026-07-28') {
+				$fields['resultType'] = 'complete';
+				if(in_array($body->method, ['server/discover', 'tools/list', 'prompts/list', 'resources/list', 'resources/templates/list', 'resources/read'], true)) {
+					// Required in 2026-07-28; application data may change or depend on the caller.
+					$fields['ttlMs'] = 0;
+					$fields['cacheScope'] = 'private';
+				}
+				$fields['_meta'] = (object) [
+					'io.modelcontextprotocol/serverInfo' => (object) ['name' => $this->name, 'version' => '1.0.0'],
+				];
+			}
 			$this->responseHandler->reply($id, is_array($result) ? $fields : (object) $fields);
 		} catch(MCPException $e) {
 			$code = $e->getCode();
@@ -351,6 +375,55 @@ class MCPServer {
 			$this->logger?->error('Internal server error', ['exception' => $e]);
 			$this->responseHandler->replyError($id, 'Internal server error', -32603);
 		}
+	}
+
+	private function requestVersion(string $method, object $params, ?HttpRequest $http): string {
+		$meta = $params->_meta ?? null;
+		if(property_exists($params, '_meta') && !$meta instanceof stdClass) {
+			throw new MCPInvalidArgumentException('Invalid request metadata', -32602);
+		}
+		$modern = $method === 'server/discover' || $http?->header('MCP-Protocol-Version') === '2026-07-28'
+			|| $http?->header('Mcp-Method') !== null
+			|| ($meta instanceof stdClass && (property_exists($meta, 'io.modelcontextprotocol/protocolVersion')
+				|| property_exists($meta, 'io.modelcontextprotocol/clientCapabilities')
+				|| property_exists($meta, 'io.modelcontextprotocol/clientInfo')));
+		if($modern) {
+			$tool = is_string($params->name ?? null) ? ($this->tools[$params->name] ?? null) : null;
+			$http?->validate($method, $params, $method === 'tools/call' ? $tool?->arguments->jsonSerialize() : null);
+			$this->validateMetadata($params);
+			return '2026-07-28';
+		}
+		if($http === null && $this->legacyStdioVersion === null && !in_array($method, ['initialize', 'ping'], true)) {
+			throw new MCPInvalidArgumentException('Send initialize for MCP 2025 or provide MCP 2026-07-28 request metadata', -32602);
+		}
+		// Legacy HTTP carries its version on each request, without a server-side session.
+		$version = $http !== null
+			? ($http->header('MCP-Protocol-Version') ?? ($method === 'initialize' ? self::LEGACY_PROTOCOL_VERSIONS[0] : '2025-03-26'))
+			: ($this->legacyStdioVersion ?? self::LEGACY_PROTOCOL_VERSIONS[0]);
+		if(!in_array($version, self::LEGACY_PROTOCOL_VERSIONS, true)) {
+			throw new MCPInvalidArgumentException('Unsupported protocol version', -32022, [
+				'supported' => self::SUPPORTED_PROTOCOL_VERSIONS, 'requested' => $version,
+			]);
+		}
+		return $version;
+	}
+
+	private function initialize(object $params, bool $stdio): object {
+		if(!is_string($params->protocolVersion ?? null) || !($params->capabilities ?? null) instanceof stdClass
+			|| !($params->clientInfo ?? null) instanceof stdClass
+			|| !is_string($params->clientInfo->name ?? null) || !is_string($params->clientInfo->version ?? null)) {
+			throw new MCPInvalidArgumentException('initialize requires protocolVersion, capabilities and clientInfo', -32602);
+		}
+		$version = in_array($params->protocolVersion, self::LEGACY_PROTOCOL_VERSIONS, true)
+			? $params->protocolVersion : self::LEGACY_PROTOCOL_VERSIONS[0];
+		if($stdio) {
+			$this->legacyStdioVersion = $version;
+		}
+		$result = (array) $this->discover();
+		unset($result['supportedVersions']);
+		$result['protocolVersion'] = $version;
+		$result['serverInfo'] = (object) ['name' => $this->name, 'version' => '1.0.0'];
+		return (object) $result;
 	}
 
 	private function replyInvalidRequest(string $message, int $code): void {
@@ -370,6 +443,9 @@ class MCPServer {
 			throw new MCPInvalidArgumentException('Required protocolVersion and clientCapabilities metadata is missing or invalid', -32602);
 		}
 		$version = $meta->{'io.modelcontextprotocol/protocolVersion'};
+		if(in_array($version, self::LEGACY_PROTOCOL_VERSIONS, true)) {
+			throw new MCPInvalidArgumentException('MCP 2025 versions require the initialize lifecycle', -32602);
+		}
 		if(!in_array($version, self::SUPPORTED_PROTOCOL_VERSIONS, true)) {
 			throw new MCPInvalidArgumentException('Unsupported protocol version', -32022, [
 				'supported' => self::SUPPORTED_PROTOCOL_VERSIONS,
