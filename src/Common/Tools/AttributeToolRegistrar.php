@@ -38,6 +38,9 @@ class AttributeToolRegistrar {
 
 		/** @var MCPToolAttribute $toolAttribute */
 		$toolAttribute = $attributes[0]->newInstance();
+		if(!$toolAttribute->useIf) {
+			return;
+		}
 
 		$inputSchema = self::buildInputSchema($toolAttribute->parametersSchema, $method);
 

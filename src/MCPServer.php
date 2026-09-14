@@ -184,12 +184,12 @@ class MCPServer {
 	}
 
 	/**
-	 * @param string $name
-	 * @param string $description
-	 * @param MCPToolInputSchemaInterface $inputSchema
-	 * @param callable(object): MCPToolResult $handler
-	 * @param null|object $annotations
-	 * @param null|object $outputSchema
+	 * @param string $name Stable tool identifier used by tools/list and tools/call.
+	 * @param string $description Explains the tool's purpose and usage to clients and language models.
+	 * @param MCPToolInputSchemaInterface $inputSchema JSON Schema describing accepted tool arguments.
+	 * @param callable(object): MCPToolResult $handler Executes the tool with the supplied argument object.
+	 * @param null|object $annotations Optional behavior hints; these do not enforce permissions.
+	 * @param null|object $outputSchema Optional JSON Schema describing the handler's structured result.
 	 */
 	public function registerTool(
 		string $name,
@@ -205,7 +205,7 @@ class MCPServer {
 			arguments: $inputSchema,
 			handler: $handler,
 			annotations: $annotations,
-			outputSchema: $outputSchema
+			outputSchema: $outputSchema,
 		);
 	}
 

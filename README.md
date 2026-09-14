@@ -319,6 +319,14 @@ $server->registerToolsFromObject(new MathTools());
 
 Descriptions on parameters are copied into the generated schema; when a property is not supplied in `parametersSchema`, the registrar infers the JSON Schema `type` and required flag from the method signature.
 
+### Conditional tool registration
+
+`#[MCPTool(..., useIf: FEATURE_ENABLED)]` accepts an optional boolean condition, defaulting to `true`. Attribute conditions must be valid PHP constant expressions and their constants must be defined before registration.
+
+When `useIf` is `false`, automatic registration skips the method before building its schema. This applies to both `registerToolsFromObject()` and `registerToolFromMethod()`, over CLI and HTTP. The tool is absent from `tools/list`, and `tools/call` rejects its name as unknown. Skipping a registration preserves any already registered tool with the same name.
+
+`useIf` belongs to `McpSrv\Common\Attributes\MCPTool`; the registrar evaluates it before creating the `McpSrv\Types\Tools\MCPTool` data object. It is not sent to MCP clients. For manual registration, wrap the existing `registerTool()` call in an application-level `if` condition. Changing availability requires building a new registry. Application authentication and per-user authorization remain separate checks.
+
 ## Tool Annotations
 
 Tools may carry an optional `annotations` object whose properties are **hints** about the tool's behavior. The MCP spec defines the keys below; all are optional. Clients use them to render UI hints (e.g. a "destructive" badge) or to decide which tools to expose without user confirmation.

@@ -24,7 +24,7 @@ class MCPCompatibilityTest extends TestCase {
 		$server = new MCPServer('test', $handler, instructions: 'Use simple tools.');
 		$server->registerTool('echo', 'Echo', new MCPToolInputSchema(new MCPToolProperties()),
 			static fn(object $arguments): MCPToolResult => new MCPToolResult($arguments, false),
-			returnSchema: (object) ['type' => 'object']);
+			outputSchema: (object) ['type' => 'object']);
 		return $server;
 	}
 

@@ -6,12 +6,12 @@ use JsonSerializable;
 
 class MCPTool implements JsonSerializable {
 	/**
-	 * @param string $name
-	 * @param string $description
-	 * @param MCPToolInputSchemaInterface $arguments
-	 * @param callable(object): MCPToolResult $handler
-	 * @param null|object $annotations
-	 * @param null|object $outputSchema
+	 * @param string $name Stable tool identifier used by tools/list and tools/call.
+	 * @param string $description Explains the tool's purpose and usage to clients and language models.
+	 * @param MCPToolInputSchemaInterface $arguments JSON Schema describing accepted tool arguments.
+	 * @param callable(object): MCPToolResult $handler Executes the tool with the supplied argument object.
+	 * @param null|object $annotations Optional behavior hints such as readOnlyHint; these do not enforce permissions.
+	 * @param null|object $outputSchema Optional JSON Schema describing the structured result returned by the handler.
 	 */
 	public function __construct(
 		public readonly string $name,

@@ -8,6 +8,16 @@ use McpSrv\Common\Attributes\MCPDescription;
 use McpSrv\Common\Attributes\MCPTool as MCPToolAttribute;
 
 class AttributeToolRegistrarFixture {
+	#[MCPToolAttribute(
+		name: 'disabled',
+		description: 'Excluded before schema construction',
+		parametersSchema: ['properties' => 'invalid'],
+		useIf: false,
+	)]
+	public function disabled(): void {
+		throw new \LogicException('Disabled tool must never run');
+	}
+
 	/**
 	 * @param int $a
 	 * @param int $b
