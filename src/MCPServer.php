@@ -9,7 +9,7 @@ use McpSrv\Common\MCPGeneralException;
 use McpSrv\Common\MCPInvalidArgumentException;
 use McpSrv\Common\Resources\ResourceRequest;
 use McpSrv\Common\Response\ResponseHandlerInterface;
-use McpSrv\Common\TextCleaner;
+use Rkr\WatermarkRemoval\TextCleaner;
 use McpSrv\Common\Tools\AttributeToolRegistrar;
 use McpSrv\Types\MCPPrompt;
 use McpSrv\Types\Prompts\MCPPromptArguments;

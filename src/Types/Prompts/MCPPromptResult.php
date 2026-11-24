@@ -2,7 +2,7 @@
 
 namespace McpSrv\Types\Prompts;
 
-use McpSrv\Common\TextCleaner;
+use Rkr\WatermarkRemoval\TextCleaner;
 use McpSrv\Types\Prompts\PromptResult\PromptResultMessage;
 
 class MCPPromptResult {

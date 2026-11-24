@@ -3,7 +3,7 @@
 namespace McpSrv\Types\Resources;
 
 use JsonSerializable;
-use McpSrv\Common\TextCleaner;
+use Rkr\WatermarkRemoval\TextCleaner;
 
 class MCPResource implements JsonSerializable {
 	public function __construct(

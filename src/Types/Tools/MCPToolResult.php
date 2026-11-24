@@ -3,7 +3,7 @@
 namespace McpSrv\Types\Tools;
 
 use JsonSerializable;
-use McpSrv\Common\TextCleaner;
+use Rkr\WatermarkRemoval\TextCleaner;
 
 /**
  * @phpstan-type TToolResult array{

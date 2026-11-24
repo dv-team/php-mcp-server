@@ -3,7 +3,7 @@
 namespace McpSrv\Types\Prompts\PromptResult;
 
 use JsonSerializable;
-use McpSrv\Common\TextCleaner;
+use Rkr\WatermarkRemoval\TextCleaner;
 use McpSrv\Common\PromptResult\RoleEnum;
 
 class PromptResultStringMessage implements PromptResultMessage, JsonSerializable {

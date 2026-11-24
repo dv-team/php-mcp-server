@@ -20,7 +20,7 @@ PHP 8.2 or higher and Composer:
 composer install
 ```
 
-The only runtime package dependency is `psr/log`. Authentication providers, tool discovery and application schema validation belong to the integrating application. There is no dependency on `mcp/sdk`.
+Runtime dependencies are `psr/log` and `rkr/ai-watermark-removal-tools`. Authentication providers, tool discovery and application schema validation belong to the integrating application. There is no dependency on `mcp/sdk`.
 
 ## Compatibility and migration
 
@@ -45,6 +45,8 @@ Both lifecycles use standard JSON-RPC envelopes and error codes. Malformed messa
 ## Usage
 
 ### Automatic text cleanup
+
+Text cleanup uses the standalone [rkr/ai-watermark-removal-tools](https://github.com/rkrx/ai-watermark-removal-tools) library. The former `McpSrv\Common\TextCleaner` class name remains available as an alias.
 
 Over HTTP and STDIO, the server strips invisible watermark characters from string values in tool, prompt and resource arguments before calling the handler. It also cleans tool results (both text and structured content), prompt messages, resource text, server instructions, descriptions and error messages. Nested application strings are treated as text, including application identifiers passed as arguments. JSON-RPC IDs, routing names, resource URIs, property names and literal schema constraints retain their exact values. A string bound to an HTTP header must already be clean so the handler receives the value verified against that header.
 
