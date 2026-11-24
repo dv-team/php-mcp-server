@@ -3,11 +3,12 @@
 namespace McpSrv\Types\Tools;
 
 use JsonSerializable;
+use McpSrv\Common\TextCleaner;
 
 /**
  * @phpstan-type TToolResult array{
  *     content: array{type: "text", text: string}[],
- *     structuredContent: object|array<array-key, mixed>,
+ *     structuredContent: mixed,
  *     isError: bool
  * }
  */
@@ -25,12 +26,13 @@ class MCPToolResult implements JsonSerializable {
 	 * @return TToolResult
 	 */
 	public function jsonSerialize(): array {
+		$content = TextCleaner::values($this->content);
 		return [
 			'content' => [[
 				'type' => 'text',
-				'text' => json_encode($this->content, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)
+				'text' => json_encode($content, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)
 			]],
-			'structuredContent' => $this->content,
+			'structuredContent' => $content,
 			'isError' => $this->isError
 		];
 	}

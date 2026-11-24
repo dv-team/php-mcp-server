@@ -94,6 +94,16 @@ class HttpRequestTest extends TestCase {
 		(new HttpRequest($headers))->validate('tools/call', $params, $schema);
 	}
 
+	public function testHandlerCannotReceiveADifferentValueFromItsBoundHeader(): void {
+		$value = "e\u{200B}u";
+		$params = self::params();
+		$params->arguments = (object) ['region' => $value];
+		$schema = (object) ['properties' => ['region' => ['type' => 'string', 'x-mcp-header' => 'Region']]];
+		$this->expectExceptionCode(-32020);
+		(new HttpRequest(self::headers() + ['Mcp-Param-Region' => '=?base64?' . base64_encode($value) . '?=']))
+			->validate('tools/call', $params, $schema);
+	}
+
 	public function testCustomHeaderCannotClaimAnAbsentArgument(): void {
 		$schema = (object) ['properties' => ['region' => ['type' => 'string', 'x-mcp-header' => 'Region']]];
 		(new HttpRequest(self::headers()))->validate('tools/call', self::params(), $schema);

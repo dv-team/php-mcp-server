@@ -44,6 +44,12 @@ Both lifecycles use standard JSON-RPC envelopes and error codes. Malformed messa
 
 ## Usage
 
+### Automatic text cleanup
+
+Over HTTP and STDIO, the server strips invisible watermark characters from string values in tool, prompt and resource arguments before calling the handler. It also cleans tool results (both text and structured content), prompt messages, resource text, server instructions, descriptions and error messages. Nested application strings are treated as text, including application identifiers passed as arguments. JSON-RPC IDs, routing names, resource URIs, property names and literal schema constraints retain their exact values. A string bound to an HTTP header must already be clean so the handler receives the value verified against that header.
+
+The filter removes characters such as an embedded BOM, soft hyphen, stray zero-width space and most C0/C1 controls. Tabs, line breaks and combining accents are preserved. Context rules retain emoji joiners and presentation selectors, flag tags, script shaping and word boundaries such as those in Persian and Thai. Directional controls are retained in text containing right-to-left letters. Marks that could carry either formatting or a watermark can therefore survive cleanup.
+
 ### Implemented JSON-RPC methods
 
 - `initialize`, `ping`: the 2025 lifecycle
@@ -70,7 +76,7 @@ command = "php"
 args = ["cli.php"]
 ```
 
-Keep your existing command and arguments if you already have an application entrypoint. **Do not enable `mcp_2026_07_28` or set `CODEX_MCP_PROTOCOL_VERSION` for ordinary use.** If you added those experimental opt-ins for an earlier version of this library, remove them and restart Codex. Codex CLI 0.153.4 has been tested with the feature disabled, using its default 2025-06-18 handshake and real tool calls over both STDIO and HTTP. Clients that already use the 2026 protocol remain supported. Project configuration applies only to trusted projects. [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp)
+Keep your existing command and arguments if you already have an application entrypoint. **Do not enable `mcp_2026_07_28` or set `CODEX_MCP_PROTOCOL_VERSION` for ordinary use.** If you added those experimental opt-ins for an earlier version of this library, remove them and restart Codex. Codex CLI 0.153.4 has been tested with the feature disabled, using its default 2025-06-18 handshake and real tool calls over both STDIO and HTTP. The repeatable native HTTP scenario also passed with Codex CLI 0.154.0 on 2026-10-08, including bearer authentication and consecutive calls in fresh PHP invocations. Clients that already use the 2026 protocol remain supported. Project configuration applies only to trusted projects. [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp)
 
 ### Native PHP HTTP
 
@@ -147,6 +153,16 @@ python3 tests/auth_http_smoke.py
 ```
 
 The HTTP checks start temporary PHP servers bound to loopback and terminate them afterwards. They exercise both lifecycles, including fresh requests after initialization, header validation, notifications and tool calls. The authenticated check uses an application-defined test provider and verifies rejected requests, custom challenges, provider failures and per-request identities across the supported versions. It does not contact external services. Both scripts require Python 3 and permission to open a local socket. Never deploy `tests/Fixtures/`. In environments that prohibit PHPStan's parallel-worker socket, run `composer phpstan -- --debug` instead.
+
+For a real Codex CLI integration test (requires an installed, signed-in Codex CLI and model access):
+
+```bash
+composer test:codex-http
+# Keep request/response evidence in a new or empty directory:
+python3 tests/codex_http_smoke.py --output-dir temp/codex-http-run
+```
+
+The test invokes `codex exec` with temporary URL overrides, an ephemeral session and the ordinary 2025 protocol. It uses the actual `http.php` clock tool and a protected native PHP fixture, checks three completed MCP calls against the HTTP responses, verifies separate PHP invocations without MCP sessions, and rejects missing/incorrect credentials before and after Codex's authenticated calls. It does not change your Codex configuration. Unlike the Python-only HTTP checks, this test contacts the configured Codex model service and consumes model usage. See [the scenario, evidence and deployment boundaries](docs/codex-http-testing.md).
 
 The real Codex transport tests do not establish hosted Claude compatibility or verify an application's OAuth/Entra integration; those require separate end-to-end checks against the application endpoint.
 

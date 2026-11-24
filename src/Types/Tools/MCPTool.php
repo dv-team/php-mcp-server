@@ -3,6 +3,7 @@
 namespace McpSrv\Types\Tools;
 
 use JsonSerializable;
+use McpSrv\Common\TextCleaner;
 
 class MCPTool implements JsonSerializable {
 	/**
@@ -36,16 +37,16 @@ class MCPTool implements JsonSerializable {
 
 		$result = [
 			'name' => $this->name,
-			'description' => $this->description,
-			'inputSchema' => $inputSchema,
+			'description' => TextCleaner::text($this->description),
+			'inputSchema' => TextCleaner::schema($inputSchema),
 		];
 
 		if($this->annotations !== null) {
-			$result['annotations'] = $this->annotations;
+			$result['annotations'] = TextCleaner::schema($this->annotations);
 		}
 
 		if($this->outputSchema !== null) {
-			$result['outputSchema'] = $this->outputSchema;
+			$result['outputSchema'] = TextCleaner::schema($this->outputSchema);
 		}
 
 		return (object) $result;

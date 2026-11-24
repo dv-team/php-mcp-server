@@ -32,6 +32,7 @@
     },
     "scripts": {
         "phpstan": "phpstan analyse -c phpstan.neon --memory-limit=2G --no-progress",
-        "test": "phpunit"
+        "test": "phpunit",
+        "test:codex-http": "python3 tests/codex_http_smoke.py"
     }
 }

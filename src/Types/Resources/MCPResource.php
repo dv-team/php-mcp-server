@@ -3,6 +3,7 @@
 namespace McpSrv\Types\Resources;
 
 use JsonSerializable;
+use McpSrv\Common\TextCleaner;
 
 class MCPResource implements JsonSerializable {
 	public function __construct(
@@ -15,7 +16,7 @@ class MCPResource implements JsonSerializable {
 		return [
 			'uri' => $this->uri,
 			'mimeType' => $this->mimeType,
-			'text' => $this->contents,
+			'text' => TextCleaner::text($this->contents),
 		];
 	}
 }

@@ -3,6 +3,7 @@
 namespace McpSrv\Types\Prompts\PromptResult;
 
 use JsonSerializable;
+use McpSrv\Common\TextCleaner;
 use McpSrv\Common\PromptResult\RoleEnum;
 
 class PromptResultStringMessage implements PromptResultMessage, JsonSerializable {
@@ -25,7 +26,7 @@ class PromptResultStringMessage implements PromptResultMessage, JsonSerializable
 			'role' => $this->role->value,
 			'content' => [
 				'type' => 'text',
-				'text' => $this->content,
+				'text' => TextCleaner::text($this->content),
 			],
 		];
 	}

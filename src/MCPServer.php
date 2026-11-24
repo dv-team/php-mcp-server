@@ -9,6 +9,7 @@ use McpSrv\Common\MCPGeneralException;
 use McpSrv\Common\MCPInvalidArgumentException;
 use McpSrv\Common\Resources\ResourceRequest;
 use McpSrv\Common\Response\ResponseHandlerInterface;
+use McpSrv\Common\TextCleaner;
 use McpSrv\Common\Tools\AttributeToolRegistrar;
 use McpSrv\Types\MCPPrompt;
 use McpSrv\Types\Prompts\MCPPromptArguments;
@@ -341,6 +342,9 @@ class MCPServer {
 				$this->responseHandler->reply($id, new stdClass());
 				return;
 			}
+			if(($params->arguments ?? null) instanceof stdClass && in_array($body->method, ['tools/call', 'prompts/get', 'resources/read'], true)) {
+				$params->arguments = TextCleaner::values($params->arguments);
+			}
 			$result = match($body->method) {
 				'server/discover' => $this->discover(),
 				'prompts/list' => $this->listPrompts($params),
@@ -370,7 +374,7 @@ class MCPServer {
 			if($code === 0 || $code === 100 || $code === 500) {
 				$code = $e instanceof MCPInvalidArgumentException ? -32602 : -32603;
 			}
-			$this->responseHandler->replyError($id, $e->getMessage(), $code, $e->getData());
+			$this->responseHandler->replyError($id, TextCleaner::text($e->getMessage()), $code, $e->getData());
 		} catch(Throwable $e) {
 			$this->logger?->error('Internal server error', ['exception' => $e]);
 			$this->responseHandler->replyError($id, 'Internal server error', -32603);
@@ -470,7 +474,7 @@ class MCPServer {
 			'capabilities' => (object) $capabilities,
 		];
 		if($this->instructions !== null) {
-			$result['instructions'] = $this->instructions;
+			$result['instructions'] = TextCleaner::text($this->instructions);
 		}
 		return (object) $result;
 	}
@@ -490,14 +494,14 @@ class MCPServer {
 			foreach($prompt->arguments as $arg) {
 				$arguments[] = [
 					'name' => $arg->name,
-					'description' => $arg->description,
+					'description' => $arg->description === null ? null : TextCleaner::text($arg->description),
 					'required' => $arg->required,
 				];
 			}
 
 			$prompts[] = [
 				'name' => $name,
-				'description' => $prompt->description,
+				'description' => TextCleaner::text($prompt->description),
 				'arguments' => $arguments,
 			];
 		}
@@ -539,7 +543,7 @@ class MCPServer {
 			];
 
 			if($resource['description'] !== null) {
-				$entry['description'] = $resource['description'];
+				$entry['description'] = TextCleaner::text($resource['description']);
 			}
 
 			if($resource['mimeType'] !== null) {
@@ -547,7 +551,9 @@ class MCPServer {
 			}
 
 			if(count((array) ($resource['inputSchema']['properties'] ?? [])) || array_key_exists('required', $resource['inputSchema'])) {
-				$entry['inputSchema'] = $resource['inputSchema'];
+				/** @var TResourceInputSchema $schema Only description and title strings are rewritten. */
+				$schema = TextCleaner::schema($resource['inputSchema']);
+				$entry['inputSchema'] = $schema;
 			}
 
 			$resources[] = $entry;
@@ -709,9 +715,12 @@ class MCPServer {
 				}
 				$name = $property['name'];
 				unset($property['name']);
-				$properties[$name] = $property;
+				$properties[$name] = TextCleaner::schema($property);
 			}
 			unset($template['properties'], $template['handler']);
+			if(isset($template['description'])) {
+				$template['description'] = TextCleaner::text($template['description']);
+			}
 			$template['name'] = $template['uriTemplate'];
 			$template['inputSchema'] = [
 				'type' => 'object',
