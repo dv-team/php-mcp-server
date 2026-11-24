@@ -2,6 +2,8 @@
 
 namespace McpSrv\Common;
 
+use Rkr\WatermarkRemoval\TextCleaner;
+
 /** Request-scoped HTTP metadata; never stored between MCP requests. */
 final class HttpRequest {
 	/** @var array<string, string> */
@@ -101,6 +103,9 @@ final class HttpRequest {
 						throw new MCPInvalidArgumentException("Unexpected $headerName header", -32020);
 					}
 				} else {
+					if(is_string($value) && TextCleaner::text($value) !== $value) {
+						throw new MCPInvalidArgumentException("Text cleanup would change the value bound to $headerName", -32020);
+					}
 					$integer = ($property->type ?? null) === 'integer';
 					if($integer && (!is_int($value) && !is_float($value)
 						|| !is_finite((float) $value) || abs($value) > 9007199254740991 || floor((float) $value) !== (float) $value)) {
